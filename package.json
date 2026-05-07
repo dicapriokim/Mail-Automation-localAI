@@ -1,0 +1,18 @@
+{
+  "name": "mail-automator-api",
+  "version": "1.0.0",
+  "description": "API-based Mail Automation Engine",
+  "main": "index.js",
+  "scripts": {
+    "auth": "node src/auth.js",
+    "cleanup": "node src/cleanup.js",
+    "summarize": "node src/summarize.js"
+  },
+  "dependencies": {
+    "@google-cloud/local-auth": "^3.0.0",
+    "dotenv": "^16.0.0",
+    "googleapis": "^126.0.0",
+    "imap-simple": "^5.1.0",
+    "mailparser": "^3.9.8"
+  }
+}
