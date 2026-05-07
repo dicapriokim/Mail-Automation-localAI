@@ -549,7 +549,7 @@ async function appendToDocs(auth, documentId, gmailSummaries, naverSummaries, cl
         requestBody: { requests }
     });
 
-    console.log(`[Docs] 스타일 적용된 보고서 기록 완료: ${documentId}`);
+    console.log(`[Docs] 스타일 적용된 보고서 기록 완료`);
 }
 
 async function clearDocContents(auth, documentId) {
