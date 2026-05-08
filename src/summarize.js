@@ -6,8 +6,12 @@ const imaps = require('imap-simple');
 const { simpleParser } = require('mailparser');
 require('dotenv').config();
 
-// Ollama API 설정
-const OLLAMA_API_URL = process.env.OLLAMA_API_URL || 'http://192.168.x.50:11434/api/generate';
+// Ollama API 설정 (통합 LXC 환경: localhost 내부 통신)
+const OLLAMA_CONFIG = {
+    URL: process.env.OLLAMA_API_URL || 'http://192.168.0.32:11434/api/generate',
+    MODEL: 'antigravity-model:1.5b'
+    //MODEL: 'antigravity-model:3b'
+};
 
 /**
  * 본문 정규화 고도화: MIME 디코딩, 멀티파트 브레이킹, HTML 제거
@@ -69,16 +73,18 @@ async function callLocalAI(prompt) {
     const timeoutId = setTimeout(() => controller.abort(), 120000); // 120초 타임아웃
 
     try {
-        const response = await fetch(OLLAMA_API_URL, {
+        const response = await fetch(OLLAMA_CONFIG.URL, {
             method: 'POST',
             headers: { 'Content-Type': 'application/json' },
             body: JSON.stringify({
-                model: "qwen2.5:1.5b",
+                model: OLLAMA_CONFIG.MODEL,
                 prompt: prompt,
                 format: "json",
                 stream: false,
+                keep_alive: "5m",
                 options: {
-                    temperature: 0
+                    temperature: 0.3,
+                    num_ctx: 4096
                 }
             }),
             signal: controller.signal
@@ -326,6 +332,10 @@ async function fetchNaverSummaries() {
             rawData.push({ subject, from, date, body: cleanText });
         }
 
+        // ★ 수집 완료 즉시 IMAP 연결 종료 (Idle Timeout 방지)
+        connection.end();
+        console.log(`[Naver] IMAP 연결 종료 완료. ${rawData.length}건 오프라인 처리 시작.`);
+
         const finalResults = [];
         const llmTargets = [];
         const llmIndices = [];
@@ -371,7 +381,6 @@ async function fetchNaverSummaries() {
             });
         }
 
-        connection.end();
         return finalResults.filter(r => r !== undefined);
     } catch (err) {
         console.error('[Naver Fetch Error]', err.message);
@@ -541,6 +550,45 @@ async function appendToDocs(auth, documentId, gmailSummaries, naverSummaries, cl
             range: { startIndex: headerStart, endIndex: headerStart + statsHeader.length },
             textStyle: { bold: true, fontSize: { magnitude: 12, unit: 'PT' } },
             fields: 'bold,fontSize'
+        }
+    });
+
+    // --- [추가] 최종 작성 일시 타임스탬프 (KST) ---
+    const nowKST = new Date().toLocaleString('ko-KR', { 
+        timeZone: 'Asia/Seoul',
+        year: 'numeric',
+        month: '2-digit',
+        day: '2-digit',
+        hour: '2-digit',
+        minute: '2-digit',
+        second: '2-digit',
+        hour12: false 
+    }).replace(/\. /g, '-').replace(/\./g, '');
+    
+    const timestampLine = `\n최종 작성 일시: ${nowKST} (KST)\n`;
+    const timestampStart = currentIndex + stats.length;
+
+    requests.push({ insertText: { endOfSegmentLocation: { segmentId: '' }, text: timestampLine } });
+
+    // 스타일 설정: 9PT, 이탤릭, 짙은 회색
+    requests.push({
+        updateTextStyle: {
+            range: { startIndex: timestampStart, endIndex: timestampStart + timestampLine.length },
+            textStyle: {
+                fontSize: { magnitude: 9, unit: 'PT' },
+                italic: true,
+                foregroundColor: { color: { rgbColor: { red: 0.4, green: 0.4, blue: 0.4 } } }
+            },
+            fields: 'fontSize,italic,foregroundColor'
+        }
+    });
+
+    // 정렬 설정: 오른쪽 정렬
+    requests.push({
+        updateParagraphStyle: {
+            range: { startIndex: timestampStart, endIndex: timestampStart + timestampLine.length },
+            paragraphStyle: { alignment: 'END' },
+            fields: 'alignment'
         }
     });
 

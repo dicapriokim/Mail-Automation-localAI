@@ -19,11 +19,7 @@ if [ ${#MISSING_FILES[@]} -ne 0 ]; then
 fi
 
 # 3. 메일 요약 프로세스 실행 (Node.js)
-echo "--- [1/2] 메일 요약 프로세스 시작 ---"
-npm run summarize
-
-# 4. 카카오톡 알림 전송 (Python)
-echo "--- [2/2] 카카오톡 알림 전송 ---"
-python3 send_kakao.py "돼지지렁이님, 서버에서 요청하신 메일 요약 보고서가 생성되었습니다. 📧"
+echo "--- 메일 요약 프로세스 시작 ---"
+node index.js
 
 echo "--- [완료] 모든 자동화 작업이 끝났습니다 ---"

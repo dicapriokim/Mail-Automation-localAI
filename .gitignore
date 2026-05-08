@@ -1,7 +1,6 @@
 # Environment and Credentials
 .env
 credentials.json
-kakao_token.json
 token.json
 token.json_bak
 
