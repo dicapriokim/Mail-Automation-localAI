@@ -120,6 +120,7 @@ async function summarizeBatchWithLLM(texts) {
 
     for (let i = 0; i < cleanTexts.length; i++) {
         const text = cleanTexts[i];
+        let cooldownMs = 4000; // 기본 성공 시 4초 대기
         try {
             const prompt = `다음 이메일 본문을 분석하여 핵심 내용을 1문장으로 요약하고 분류 지침에 따라 JSON 객체로 반환하라.
             
@@ -145,6 +146,7 @@ async function summarizeBatchWithLLM(texts) {
 
         } catch (err) {
             console.error(`[Local AI Error] ${i + 1}번째 메일 요약 실패: ${err.message}`);
+            cooldownMs = 6000; // 에러 발생 시 엔진 재안정화를 위해 6초 대기
             // Safe Fallback: 개별 실패 시 무결성 방어
             results.push({
                 summary: "[AI 요약 지연] 분석 실패 또는 타임아웃",
@@ -154,9 +156,9 @@ async function summarizeBatchWithLLM(texts) {
             });
         }
 
-        // AI 서버 과부하 방지를 위한 1초 휴지기
+        // AI 서버 과부하 방지를 위한 휴지기 (마지막 루프 제외)
         if (i < cleanTexts.length - 1) {
-            await new Promise(resolve => setTimeout(resolve, 1000));
+            await new Promise(resolve => setTimeout(resolve, cooldownMs));
         }
     }
 
