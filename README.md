@@ -75,9 +75,9 @@ TELEGRAM_CHAT_ID=your_chat_id
 | `LOCALAI_API_URL` | LocalAI 서버 OpenAI 호환 규격 엔드포인트 |
 | `LLM_MODEL` | LocalAI에 구동 등록된 모델 식별 이름 (생략 시 기본값: `qwen-1.5b`) |
 | `NAVER_ID` / `NAVER_PW` | 네이버 IMAP 접속 계정 (앱 비밀번호) |
-| `GOOGLE_DOC_ID` | 보고서를 기록할 구글 독스 문서 ID |
-| `TELEGRAM_BOT_TOKEN` | BotFather를 통해 발급받은 봇 토큰 |
-| `TELEGRAM_CHAT_ID` | 알림을 수신할 텔레그램 고유 숫자 ID |
+| `GOOGLE_DOC_ID` | 보고서를 기록할 구글 독스 문서 ID (구글 독스 웹 브라우저 주소창의 `https://docs.google.com/document/d/[이_부분이_문서_ID]/edit` 에서 확인 가능) |
+| `TELEGRAM_BOT_TOKEN` | 텔레그램 봇 API 토큰 (텔레그램 검색창에 `@BotFather`를 검색한 후 대화방에서 `/newbot` 명령어를 실행하여 발급 가능) |
+| `TELEGRAM_CHAT_ID` | 알림을 수신할 텔레그램 고유 숫자 ID (텔레그램 검색창에 `@userinfobot` 또는 `@GetMyChatID_Bot`을 검색하여 대화방을 시작하면 본인의 숫자 ID를 즉시 확인 가능) |
 
 ---
 
