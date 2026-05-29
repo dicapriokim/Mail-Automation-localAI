@@ -74,16 +74,25 @@ TELEGRAM_CHAT_ID=your_chat_id
 |------|------|
 | `LOCALAI_API_URL` | LocalAI-miniPC (본문 전제 조건 설명 참조) 안내에 따라 설치한 로컬 AI 서버의 API 주소 (예: `http://192.168.0.33:8080/v1/chat/completions`) |
 | `LLM_MODEL` | LocalAI에 구동 등록된 모델 식별 이름 (생략 시 기본값: `qwen-1.5b`) |
-| `NAVER_ID` / `NAVER_PW` | 네이버 IMAP 접속 계정 (앱 비밀번호) |
-| `GOOGLE_DOC_ID` | 보고서를 기록할 구글 독스 문서 ID (구글 독스 웹 브라우저 주소창의 `https://docs.google.com/document/d/[이_부분이_문서_ID]/edit` 에서 확인 가능) |
+| `NAVER_ID` / `NAVER_PW` | 네이버(www.naver.com) 사이트 계정의 아이디/비밀번호 |
+| `GOOGLE_DOC_ID` | 보고서를 기록할 구글 독스 문서 ID (상세 확인 방법은 아래 설명 참조) |
 | `TELEGRAM_BOT_TOKEN` | 텔레그램 봇 API 토큰 (텔레그램 검색창에 `@BotFather`를 검색한 후 대화방에서 `/newbot` 명령어를 실행하여 발급 가능) |
 | `TELEGRAM_CHAT_ID` | 알림을 수신할 텔레그램 고유 숫자 ID (텔레그램 검색창에 `@userinfobot` 또는 `@GetMyChatID_Bot`을 검색하여 대화방을 시작하면 본인의 숫자 ID를 즉시 확인 가능) |
+
+> 💡 **구글 문서 ID(GOOGLE_DOC_ID) 확인 방법**:
+> 구글 문서를 화면에 열어둔 상태에서 상단 주소창을 보면 아래와 같은 규칙적인 구조를 가지고 있습니다.
+> 
+> * **구글 문서 URL 구조 예시**:
+>   `https://docs.google.com/document/d/1A2B3C4D5E6F7G8H9I0J_abc123XYZ/edit`
+> 
+> 여기서 `d/` 바로 뒤부터 시작해서 다음 슬래시인 `/edit` 전까지 위치한 `1A2B3C4D5E6F7G8H9I0J_abc123XYZ` 형태의 긴 무작위 문자열이 바로 해당 문서의 고유 ID(Document ID)입니다.
+
 
 ---
 
 ### 4. 실행 방식 선택 (Execution)
 
-#### 방법 A: 일반 로컬 구동 (노트북/로컬 환경)
+#### 방법 A: 일반 로컬 구동 (CMD/파워셀에서 실행)
 ```bash
 npm install
 node index.js
