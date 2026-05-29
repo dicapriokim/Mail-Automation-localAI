@@ -47,7 +47,7 @@ LLM_MODEL=사용할_모델_이름 (예: qwen-1.5b)
 
 ### 1. 전제 조건
 - Node.js (v18+) 또는 Docker 설치 완료
-- **LocalAI 서버 구축**: `qwen-1.5b` 등의 텍스트 모델 로드 완료
+- **LocalAI 서버 구축**: LocalAI는 외부 클라우드 통신 없이 로컬 환경에서 OpenAI API와 동일한 규격의 엔드포인트를 제공하는 경량 자율형 AI 서버 엔진입니다. 메일 요약을 실행하기 전, [LocalAI-miniPC 저장소](https://github.com/dicapriokim/LocalAI-miniPC)의 안내에 따라 로컬 AI 서버를 먼저 구축하고 `qwen-1.5b` 등의 텍스트 모델 로드를 마쳐야 합니다.
 - Google Cloud Console에서 API 권한 설정 (`credentials.json`) 및 브라우저를 통한 Google 토큰 정보(`token.json`) 발급 완료
 - Telegram BotFather를 통해 봇 토큰 발급
 
