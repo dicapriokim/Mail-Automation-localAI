@@ -59,8 +59,8 @@ const LOCALAI_CONFIG = {
 
 ### 2. 설치
 ```bash
-git clone https://github.com/dicapriokim/Mail-Automation-localpc.git
-cd Mail-Automation-localpc
+git clone https://github.com/dicapriokim/Mail-Automation-localAI.git
+cd Mail-Automation-localAI
 ```
 
 ### 3. 환경 설정 (`.env`)
