@@ -33,21 +33,15 @@
 
 ## 🔄 LLM 모델 교체 (Model Swap)
 
-별도의 소스 코드 빌드 없이 **`.env` 설정 수정만으로** 사용 모델을 즉시 스왑할 수 있도록 환경 변수 제어를 지원합니다.
+별도의 소스 코드 빌드 없이 **`.env` 설정 수정만으로** 사용 모델을 즉시 변경할 수 있도록 환경 변수 제어를 지원합니다.
 
 ```env
 # .env 파일 내 설정
 LLM_MODEL=사용할_모델_이름 (예: qwen-1.5b)
 ```
 
-코드 내부(`src/summarize.js`)에서는 해당 값을 읽어 LocalAI에 전달하도록 추상화되어 있습니다.
+* **참고**: `.env` 파일에 `LLM_MODEL` 변수를 기재하지 않거나 생략하는 경우, 기본 빌드 사양인 **`qwen-1.5b` 모델**로 자동 작동합니다.
 
-```js
-const LOCALAI_CONFIG = {
-    URL: process.env.LOCALAI_API_URL || 'http://192.168.0.33:8080/v1/chat/completions',
-    MODEL: process.env.LLM_MODEL || 'qwen-1.5b'
-};
-```
 
 ## 🚀 시작하기 (Getting Started)
 
