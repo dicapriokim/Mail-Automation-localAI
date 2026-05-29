@@ -7,9 +7,9 @@ const { simpleParser } = require('mailparser');
 require('dotenv').config();
 
 // LocalAI API 설정 (OpenAI 규격 호환)
-const OLLAMA_CONFIG = {
-    URL: process.env.OLLAMA_API_URL || 'http://192.168.0.33:8080/v1/chat/completions',
-    MODEL: 'qwen-1.5b'
+const LOCALAI_CONFIG = {
+    URL: process.env.LOCALAI_API_URL || process.env.OLLAMA_API_URL || 'http://192.168.0.33:8080/v1/chat/completions',
+    MODEL: process.env.LLM_MODEL || 'qwen-1.5b'
 };
 
 /**
@@ -72,11 +72,11 @@ async function callLocalAI(prompt) {
     const timeoutId = setTimeout(() => controller.abort(), 120000); // 120초 타임아웃
 
     try {
-        const response = await fetch(OLLAMA_CONFIG.URL, {
+        const response = await fetch(LOCALAI_CONFIG.URL, {
             method: 'POST',
             headers: { 'Content-Type': 'application/json' },
             body: JSON.stringify({
-                model: OLLAMA_CONFIG.MODEL,
+                model: LOCALAI_CONFIG.MODEL,
                 messages: [
                     { role: "user", content: prompt }
                 ],
@@ -714,7 +714,7 @@ async function main() {
             cleanupNaver()
         ]);
 
-        console.log('[Step 2] 메일 요약 데이터 추출 중 (Ollama Local AI)...');
+        console.log('[Step 2] 메일 요약 데이터 추출 중 (LocalAI)...');
         const gmailData = await fetchGmailSummaries(auth);
         const naverData = await fetchNaverSummaries();
 
