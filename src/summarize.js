@@ -6,11 +6,10 @@ const imaps = require('imap-simple');
 const { simpleParser } = require('mailparser');
 require('dotenv').config();
 
-// Ollama API 설정 (통합 LXC 환경: localhost 내부 통신)
+// LocalAI API 설정 (OpenAI 규격 호환)
 const OLLAMA_CONFIG = {
-    URL: process.env.OLLAMA_API_URL || 'http://192.168.0.32:11434/api/generate',
-    MODEL: 'antigravity-model:1.5b'
-    //MODEL: 'antigravity-model:3b'
+    URL: process.env.OLLAMA_API_URL || 'http://192.168.0.33:8080/v1/chat/completions',
+    MODEL: 'qwen-1.5b'
 };
 
 /**
@@ -78,14 +77,11 @@ async function callLocalAI(prompt) {
             headers: { 'Content-Type': 'application/json' },
             body: JSON.stringify({
                 model: OLLAMA_CONFIG.MODEL,
-                prompt: prompt,
-                format: "json",
-                stream: false,
-                keep_alive: "5m",
-                options: {
-                    temperature: 0.3,
-                    num_ctx: 4096
-                }
+                messages: [
+                    { role: "user", content: prompt }
+                ],
+                response_format: { type: "json_object" },
+                temperature: 0.3
             }),
             signal: controller.signal
         });
@@ -93,15 +89,21 @@ async function callLocalAI(prompt) {
         clearTimeout(timeoutId);
 
         if (!response.ok) {
-            throw new Error(`Ollama API Error: ${response.statusText}`);
+            const errorText = await response.text();
+            throw new Error(`LocalAI API Error: ${response.status} ${response.statusText} - ${errorText}`);
         }
 
         const data = await response.json();
-        return JSON.parse(data.response);
+        let content = data.choices[0].message.content.trim();
+        // markdown 코드 블록 감싸기 제거 대응
+        if (content.startsWith('```')) {
+            content = content.replace(/^```json\s*/i, '').replace(/```$/, '').trim();
+        }
+        return JSON.parse(content);
     } catch (error) {
         clearTimeout(timeoutId);
         if (error.name === 'AbortError') {
-            throw new Error("Ollama 추론 타임아웃 (120초 초과)");
+            throw new Error("LocalAI 추론 타임아웃 (120초 초과)");
         }
         throw error;
     }
