@@ -4,13 +4,11 @@
 [![Node.js Version](https://img.shields.io/badge/Node.js-18+-green.svg)](https://nodejs.org/)
 [![Docker Support](https://img.shields.io/badge/Docker-Supported-blue.svg)](https://www.docker.com/)
 
-[English README is available here (영어 설명서)](README_EN.md)
-
 **Antigravity Mail Local**은 지메일(Gmail)과 네이버 메일(Naver Mail)의 수많은 뉴스레터를 자동으로 수집, 요약하여 구글 독스(Google Docs) 보고서로 정리하고 텔레그램(Telegram) 봇으로 작업 완료 알림을 즉시 전송하는 스마트 메일 비서 시스템입니다. 본 프로젝트는 외부 클라우드 의존성 없이 **로컬 LLM 서버(LocalAI)** 및 **Docker**를 사용하여 프라이버시를 강화하고 자원 효율을 극대화하도록 최적화되었습니다.
 
 ## 🌟 주요 특징 (Key Features)
 
-- **📧 멀티 채널 메일 통합**: Gmail API 및 Naver IMAP을 지원하여 분산된 메일을 한곳에 모읍니다.
+- **📧 멀티 채널 메일 통합**: Gmail API 및 Naver IMAP을 지원하여 분산된 메일을 한곳에 모웁니다.
 - **🧠 로컬 AI 엔진 (LocalAI)**: OpenAI와 호환되는 로컬 AI 엔진 표준 규격 및 경량 로컬 AI 모델(**qwen-1.5b**)을 사용하여 데이터를 안전하고 비용 효율적으로 처리합니다.
 - **🐳 Docker 및 Docker Compose 지원**: 애플리케이션 실행 환경을 컨테이너로 격리하여 1회 실행 후 자동 소멸 구조로 리소스 낭비를 차단합니다.
 - **🏗️ Batch Fetch & Close 아키텍처**: IMAP 메일을 배치 수집 후 즉시 연결을 종료하여 추론 지연으로 인한 ECONNRESET을 원천 차단합니다.
@@ -214,6 +212,218 @@ docker compose up
 ## 📄 라이선스 (License)
 
 이 프로젝트는 MIT 라이선스 하에 배포됩니다.  
+Copyright (c) 2026 **돼지지렁이**. All rights reserved.
+
+### 👑 Developer
+- **돼지지렁이** (Antigravity Developer)
+
+---
+
+# 🚀 English Documentation (Antigravity Mail Local)
+
+**Antigravity Mail Local** is a smart mail assistant system that automatically fetches and summarizes newsletters from Gmail and Naver Mail, compiles them into a Google Docs report, and sends instant Telegram notifications. This project is optimized to run using a **local LLM server (LocalAI)** and **Docker** to enhance privacy and minimize cloud infrastructure costs.
+
+## 🌟 Key Features
+
+- **📧 Multi-channel Mail Integration**: Supports Gmail API and Naver IMAP to collect emails from multiple channels.
+- **🧠 Local AI Engine (LocalAI)**: Employs standard OpenAI-compatible API protocol and a lightweight local AI model (**qwen-1.5b**) to process data securely and cost-effectively.
+- **🐳 Docker & Docker Compose Support**: Isolates the execution environment using containers. Containers run once and are automatically destroyed to eliminate idle resource waste.
+- **🏗️ Batch Fetch & Close Architecture**: Closes the IMAP connection immediately after fetching emails to prevent ECONNRESET errors caused by inference latency.
+- **📊 Performance Profiling**: Automatically measures and reports elapsed processing time and total processed email counts via terminal logs and Telegram notifications.
+- **📬 Telegram Bot Notifications**: Instantly alerts completion of tasks including elapsed time, mail count, and direct Google Docs links formatted in clean Markdown.
+- **🛡️ Robust Design & Error Handling**:
+  - **120-second Timeout**: Avoids inference hangs using `AbortController`.
+  - **JSON Parsing Resilience**: Automatically sanitizes markdown blocks (```json ... ```) within LLM responses for reliable parsing.
+  - **Error Isolation**: Individual mail processing failures do not stop the pipeline; safe fallbacks are applied automatically.
+- **🧹 Auto-Cleanup**: Automatically detects promotions, advertisements, or simple notifications and moves them to the trash.
+- **💎 Premium Style Guide**: Minimizes visual clutter in Google Docs, applying unified colors, typography, and clear indentations.
+- **🕐 Document Integrity Management**: Appends the final update timestamp at the bottom right of the report using a premium style (9PT, Italic, Gray) in KST.
+
+---
+
+### 📊 Google Docs Report Preview
+When the program runs automatically, it will compile a clean report in your Google Doc using the premium layout below:
+
+```text
+# Weekly Newsletter Summary
+
+## [2026년 5월 4주차] 요약 보고서
+
+### 📧 Gmail
+
+[2026-05-29] GitHub | [Security Alert] New login from Chrome on Windows
+    ➔ 핵심 요약: 새로운 Windows 환경의 Chrome 브라우저에서 GitHub 계정 로그인이 감지되었습니다.
+    ➔ 후속 조치: [필요]  (※ Urgent emails are automatically highlighted in red inside Google Docs.)
+
+[2026-05-29] YouTube | 새로운 기능 알림: 스마트 자막 기능이 추가되었습니다
+    ➔ 핵심 요약: 유튜브에 스마트 자막 기술이 새로 도입되었다는 업데이트 안내입니다.
+    ➔ 후속 조치: [참고]
+
+### 📗 Naver Mail
+
+[2026-05-29] 네이버페이 | 결제하신 내역을 확인해 주세요
+    ➔ 핵심 요약: 등록된 수단을 통해 네이버페이 결제가 성공적으로 처리되었습니다.
+    ➔ 후속 조치: [참고]
+
+[2026-05-29] [하프클럽] 광고성 정보 수신동의 안내
+    ➔ 핵심 요약: 정기 수신동의 상태 확인 알림으로 자동 정적 필터링 처리되었습니다.
+    ➔ 후속 조치: [불필요]
+
+📊 금주 정리 통계
+- Gmail: 3건 deletion (e.g., Promotional ads automatically moved to Trash)
+- Naver: 0건 deletion
+- 작업 결과: 핵심 뉴스레터 및 주문/배송 관련 메일 4건 정규화 완료
+
+                                              최종 작성 일시: 2026-05-29 17:42:18 (KST)
+```
+
+## 🛠 Tech Stack
+
+- **Main Engine**: Node.js (v18+) / Docker (Alpine Linux)
+- **AI Model**: LocalAI / qwen-1.5b (OpenAI Chat Completions API Compatible)
+- **Notify Service**: Telegram Bot API
+- **APIs**: Gmail API, Google Docs API, Google Drive API
+- **Protocols**: IMAP (for Naver Mail)
+- **Architecture**: Batch Fetch & Close
+
+## 🔄 Model Swap
+
+You can swap the active AI model instantly by simply changing the environment variable in `.env` without modifying or rebuilding the codebase.
+
+```env
+# Configuration in .env
+LLM_MODEL=your_target_model_name (e.g., qwen-1.5b)
+```
+
+* **Note**: If `LLM_MODEL` is left blank or omitted in your `.env`, it automatically falls back to the default build configuration: **`qwen-1.5b`**.
+
+## 🔑 Integration Setup Guide
+
+### 1. Naver Mail Configuration
+You must enable external application access for Naver Mail to read inbox data over IMAP.
+
+1. **Enable IMAP Access**:
+   * Log in to Naver Mail (Web).
+   * Click **Settings** (gear icon) at the bottom left sidebar.
+   * Go to **POP3/IMAP Settings** ➡️ **IMAP/SMTP Settings** tab.
+   * Select **'Enable'** for IMAP/SMTP and save.
+2. **Issue Application Password (Required if 2-Step Verification is active)**:
+   * Go to your Naver Account Settings.
+   * Go to **Security Settings** ➡️ **Password** ➡️ **2-step Verification** management page.
+   * Under **Application Password**, select `Other` and click Generate.
+   * Copy the generated **12-digit capitalized password** and insert it as `NAVER_PW` in `.env`. (Your default password will be blocked for API logins).
+
+### 2. Google API Credentials (credentials.json) Setup
+A Google Cloud project is required to link Gmail and Google Docs.
+
+1. **Create Google Cloud Project**:
+   * Log in to [Google Cloud Console](https://console.cloud.google.com/) and create a new project.
+2. **Enable Required APIs**:
+   * Search and enable the following APIs:
+     * `Gmail API`
+     * `Google Docs API`
+     * `Google Drive API`
+3. **OAuth Consent Screen**:
+   * Go to OAuth Consent Screen menu.
+   * Set User Type to **External**, enter app info, and save.
+   * Under **Test Users**, make sure to add **your own Google Email address** (where you receive emails and edit docs).
+4. **Download credentials.json**:
+   * Go to Credentials menu ➡️ Click **Create Credentials** ➡️ Select **OAuth client ID**.
+   * Choose Application type as **Desktop App** and create.
+   * Download the JSON file, rename it to **`credentials.json`**, and place it in the root folder of the project.
+5. **Generate Authentication Token (token.json)**:
+   * Run `node index.js` for the first time. A browser window will open or a link will print in the console.
+   * Log in using your Google account and grant permissions.
+   * **⚠️ Crucial (Bypassing Verification Warning)**: Since this is a personal development app, you will see a warning: **"This app isn't verified"**.
+     * Click **'Advanced'** at the bottom left.
+     * Click **'Go to Antigravity (unsafe)'** to proceed.
+   * Once authentication finishes, **`token.json`** will be generated automatically in your workspace root, and no further browser logins are required.
+
+## 🚀 Getting Started
+
+### 1. Prerequisites
+- Node.js (v18+) or Docker installed.
+- **LocalAI Server Setup**: LocalAI is a lightweight self-hosted AI engine that emulates the OpenAI API. Please refer to [LocalAI-miniPC Repository](https://github.com/dicapriokim/LocalAI-miniPC) to build the local AI server and load `qwen-1.5b` first.
+- Google Cloud API credentials (`credentials.json`) and OAuth access token (`token.json`) verified.
+- Telegram Bot token created via BotFather.
+
+### 2. Installation
+```bash
+git clone https://github.com/dicapriokim/Mail-Automation-localAI.git
+cd Mail-Automation-localAI
+```
+
+### 3. Environment Variables Configuration (`.env`)
+Create a `.env` file in the root folder.
+
+```env
+LOCALAI_API_URL=http://your_localai_ip:8080/v1/chat/completions
+LLM_MODEL=qwen-1.5b
+NAVER_ID=your_id@naver.com
+NAVER_PW=your_app_password
+GOOGLE_DOC_ID=your_google_doc_id
+TELEGRAM_BOT_TOKEN=your_bot_token
+TELEGRAM_CHAT_ID=your_chat_id
+```
+
+| Variable | Description |
+|------|------|
+| `LOCALAI_API_URL` | The API address of the LocalAI server setup by following the [LocalAI-miniPC](https://github.com/dicapriokim/LocalAI-miniPC) guide (e.g., `http://192.168.0.33:8080/v1/chat/completions`) |
+| `LLM_MODEL` | The model identifier registered in LocalAI (defaults to: `qwen-1.5b`) |
+| `NAVER_ID` / `NAVER_PW` | Naver account ID and password (※ **`NAVER_ID` must be the full email address format including `@naver.com`**) |
+| `GOOGLE_DOC_ID` | The ID of the target Google Document (refer to URL format below) |
+| `TELEGRAM_BOT_TOKEN` | Telegram Bot token issued by messaging `@BotFather` and sending `/newbot` command |
+| `TELEGRAM_CHAT_ID` | Telegram numeric chat ID. Get it by messaging `@userinfobot` or `@GetMyChatID_Bot` |
+
+> 💡 **How to find GOOGLE_DOC_ID**:
+> Look at the address bar of your browser while viewing your Google Doc.
+> 
+> * **Google Doc URL format**:
+>   `https://docs.google.com/document/d/1A2B3C4D5E6F7G8H9I0J_abc123XYZ/edit`
+> 
+> The long random string `1A2B3C4D5E6F7G8H9I0J_abc123XYZ` located between `d/` and `/edit` is your unique Document ID.
+
+---
+
+### 4. Running the Application
+
+#### Method A: Standard Local Execution (Via CMD / PowerShell)
+```bash
+npm install
+node index.js
+```
+*(On Windows, you can simply double-click the pre-configured `run_automator.bat` file.)*
+
+#### Method B: Containerized Execution (Recommended for Servers / LXC)
+```bash
+# Build the image
+docker compose build
+
+# Single-run execution test
+docker compose up
+```
+
+---
+
+## 📅 Server Scheduler Setup (LXC / Linux)
+
+To run the mail assistant automatically everyday, add the following cron line inside `crontab -e`. The configuration below runs at 15:10 (3:10 PM) daily and automatically cleans up the container after running.
+
+```cron
+10 15 * * * cd /opt/Mail-Automator && /usr/bin/docker compose run --rm mail-automator >> /opt/Mail-Automator/cron.log 2>&1
+```
+
+---
+
+## ⚠️ Troubleshooting & Security
+
+1. **Credentials Isolation**: `token.json`, `credentials.json`, and `.env` files contain sensitive information and are strictly ignored by `.gitignore` and `.dockerignore`.
+2. **Docker Volumes Mounting**: Runtime configurations are mounted dynamically to keep key configurations outside the build image.
+3. **IMAP Stability**: Implements the Batch Fetch & Close pattern to close active sessions immediately, avoiding IMAP Idle timeouts (ECONNRESET) during inference.
+
+## 📄 License
+
+This project is licensed under the MIT License.  
 Copyright (c) 2026 **돼지지렁이**. All rights reserved.
 
 ### 👑 Developer
