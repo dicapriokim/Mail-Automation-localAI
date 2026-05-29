@@ -1,0 +1,12 @@
+version: '3.8'
+
+services:
+  mail-automator:
+    build: .
+    container_name: mail-automator
+    volumes:
+      - ./.env:/app/.env:ro
+      - ./token.json:/app/token.json:ro
+      - ./credentials.json:/app/credentials.json:ro
+    # 1회성 실행 후 종료되므로 restart는 no로 설정합니다.
+    restart: "no"

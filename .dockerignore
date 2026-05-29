@@ -1,0 +1,13 @@
+node_modules
+.venv
+venv
+*.log
+.git
+.agent
+.env
+credentials.json
+token.json
+token.json_bak
+verify_docs_clean.js
+run_automator.bat
+run_automator.sh
