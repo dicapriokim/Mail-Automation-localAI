@@ -72,7 +72,7 @@ TELEGRAM_CHAT_ID=your_chat_id
 
 | 변수 | 설명 |
 |------|------|
-| `LOCALAI_API_URL` | LocalAI 서버 OpenAI 호환 규격 엔드포인트 |
+| `LOCALAI_API_URL` | LocalAI-miniPC (본문 전제 조건 설명 참조) 안내에 따라 설치한 로컬 AI 서버의 API 주소 (예: `http://192.168.0.33:8080/v1/chat/completions`) |
 | `LLM_MODEL` | LocalAI에 구동 등록된 모델 식별 이름 (생략 시 기본값: `qwen-1.5b`) |
 | `NAVER_ID` / `NAVER_PW` | 네이버 IMAP 접속 계정 (앱 비밀번호) |
 | `GOOGLE_DOC_ID` | 보고서를 기록할 구글 독스 문서 ID (구글 독스 웹 브라우저 주소창의 `https://docs.google.com/document/d/[이_부분이_문서_ID]/edit` 에서 확인 가능) |
