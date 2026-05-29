@@ -4,6 +4,8 @@
 [![Node.js Version](https://img.shields.io/badge/Node.js-18+-green.svg)](https://nodejs.org/)
 [![Docker Support](https://img.shields.io/badge/Docker-Supported-blue.svg)](https://www.docker.com/)
 
+[English README is available here (영어 설명서)](README_EN.md)
+
 **Antigravity Mail Local**은 지메일(Gmail)과 네이버 메일(Naver Mail)의 수많은 뉴스레터를 자동으로 수집, 요약하여 구글 독스(Google Docs) 보고서로 정리하고 텔레그램(Telegram) 봇으로 작업 완료 알림을 즉시 전송하는 스마트 메일 비서 시스템입니다. 본 프로젝트는 외부 클라우드 의존성 없이 **로컬 LLM 서버(LocalAI)** 및 **Docker**를 사용하여 프라이버시를 강화하고 자원 효율을 극대화하도록 최적화되었습니다.
 
 ## 🌟 주요 특징 (Key Features)
