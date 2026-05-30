@@ -8,7 +8,7 @@ require('dotenv').config();
 
 // LocalAI API 설정 (OpenAI 규격 호환)
 const LOCALAI_CONFIG = {
-    URL: process.env.LOCALAI_API_URL || process.env.OLLAMA_API_URL || 'http://192.168.0.33:8080/v1/chat/completions',
+    URL: process.env.LOCALAI_API_URL || 'http://192.168.0.33:8080/v1/chat/completions',
     MODEL: process.env.LLM_MODEL || 'qwen-1.5b'
 };
 
@@ -65,7 +65,7 @@ function isStaticBypass(subject) {
 }
 
 /**
- * 로컬 Ollama API 통신 전용 함수 (Timeout 및 AbortController 포함)
+ * 로컬 LocalAI API 통신 전용 함수 (Timeout 및 AbortController 포함)
  */
 async function callLocalAI(prompt) {
     const controller = new AbortController();
