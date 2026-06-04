@@ -53,8 +53,8 @@ Proxmox LXC 템플릿 생성부터 GPU 패스스루 설정, Ollama 엔진 설치
 
 ### 2. 설치
 ```bash
-git clone https://github.com/dicapriokim/Antigravity-Mail-Server.git
-cd Antigravity-Mail-Server
+git clone https://github.com/dicapriokim/Mail-Automation-localAI.git
+cd Mail-Automation-localAI
 npm install
 pip install requests python-dotenv
 ```
