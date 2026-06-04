@@ -1,8 +1,8 @@
 # Environment and Credentials
 .env
 credentials.json
+kakao_token.json
 token.json
-token.json_bak
 
 # Dependencies and Virtual Environments
 node_modules/
@@ -16,4 +16,8 @@ error.log
 .agent/
 .DS_Store
 Thumbs.db
-verify_docs_clean.js
+
+# Temp backups and debug scripts
+*_bak
+*.bak
+*output.txt

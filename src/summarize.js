@@ -4,13 +4,98 @@ const { findDocId } = require('./findDoc');
 const { cleanupGmail, cleanupNaver } = require('./cleanup');
 const imaps = require('imap-simple');
 const { simpleParser } = require('mailparser');
+const net = require('net');
 require('dotenv').config();
 
-// LocalAI API 설정 (OpenAI 규격 호환)
-const LOCALAI_CONFIG = {
-    URL: process.env.LOCALAI_API_URL || 'http://192.168.0.33:8080/v1/chat/completions',
-    MODEL: process.env.LLM_MODEL || 'qwen-1.5b'
-};
+// ============================================================
+// Ollama 동적 IP 탐색 및 캐싱 모듈 (SuperLLM LXC 자동 감지)
+// ============================================================
+let resolvedOllamaUrl = null;
+
+/**
+ * TCP 소켓으로 대상 호스트:포트의 연결 가능 여부를 비동기 테스트합니다.
+ * @param {string} host - 대상 호스트 IP 또는 도메인
+ * @param {number} port - 대상 포트
+ * @param {number} timeout - 연결 타임아웃(ms)
+ * @returns {Promise<boolean>} 연결 성공 여부
+ */
+function testTcpConnection(host, port, timeout = 300) {
+    return new Promise((resolve) => {
+        const socket = new net.Socket();
+        let status = false;
+        socket.setTimeout(timeout);
+        socket.connect(port, host, () => {
+            status = true;
+            socket.destroy();
+        });
+        socket.on('timeout', () => { socket.destroy(); });
+        socket.on('error', () => { socket.destroy(); });
+        socket.on('close', () => { resolve(status); });
+    });
+}
+
+/**
+ * 192.168.0.x 서브넷 대역을 순회하며 11434 포트가 열린 Ollama 서버를 탐색합니다.
+ * @returns {Promise<string|null>} 발견된 IP 주소 또는 null
+ */
+async function scanSubnetForOllama() {
+    const promises = [];
+    for (let i = 1; i < 255; i++) {
+        const ip = `192.168.0.${i}`;
+        promises.push(
+            testTcpConnection(ip, 11434, 200).then(isOpen => isOpen ? ip : null)
+        );
+    }
+    const results = await Promise.all(promises);
+    return results.find(ip => ip !== null) || null;
+}
+
+/**
+ * Ollama API URL을 동적으로 확정합니다.
+ * 우선순위: 1) .env LOCAL_AI_IP → 2) superllm.local:11434 → 3) 서브넷 스캔
+ * 최초 1회만 스캔하며, 이후 캐싱된 URL을 즉시 반환합니다.
+ * 통신 실패 시 resolvedOllamaUrl = null 로 초기화되어 다음 호출에서 재탐색합니다.
+ * @returns {Promise<string>} Ollama chat completions API의 전체 URL
+ */
+async function getResolvedOllamaUrl() {
+    if (resolvedOllamaUrl) return resolvedOllamaUrl;
+
+    // 1순위: .env에 명시된 고정 IP
+    const envIp = process.env.LOCAL_AI_IP;
+    if (envIp) {
+        let host = envIp;
+        let port = 11434;
+        if (envIp.includes(':')) {
+            const parts = envIp.split(':');
+            host = parts[0];
+            port = parseInt(parts[1], 10);
+        }
+        if (await testTcpConnection(host, port, 400)) {
+            resolvedOllamaUrl = `http://${host}:${port}/v1/chat/completions`;
+            console.log(`[Ollama Discovery] .env 설정 IP 연결 성공: ${resolvedOllamaUrl}`);
+            return resolvedOllamaUrl;
+        }
+    }
+
+    // 2순위: mDNS 호스트명 (avahi-daemon)
+    if (await testTcpConnection('superllm.local', 11434, 400)) {
+        resolvedOllamaUrl = `http://superllm.local:11434/v1/chat/completions`;
+        console.log(`[Ollama Discovery] superllm.local:11434 연결 성공`);
+        return resolvedOllamaUrl;
+    }
+
+    // 3순위: 서브넷 대역 자동 스캔
+    const discoveredIp = await scanSubnetForOllama();
+    if (discoveredIp) {
+        resolvedOllamaUrl = `http://${discoveredIp}:11434/v1/chat/completions`;
+        console.log(`[Ollama Discovery] 서브넷 스캔으로 발견: ${resolvedOllamaUrl}`);
+        return resolvedOllamaUrl;
+    }
+
+    // 모두 실패 시 localhost 폴백
+    console.warn(`[Ollama Discovery] 자동 탐색 실패. localhost:11434 폴백 적용.`);
+    return `http://127.0.0.1:11434/v1/chat/completions`;
+}
 
 /**
  * 본문 정규화 고도화: MIME 디코딩, 멀티파트 브레이킹, HTML 제거
@@ -42,8 +127,10 @@ function preprocessText(text) {
     }
 
     // 3. MIME 멀티파트 구조 강제 분해 및 핵심 텍스트 추출
+    // Content-Type이 여러 번 등장하는 경우 가장 아래쪽의 텍스트 영역을 찾음
     if (processed.includes('Content-Type:')) {
         const parts = processed.split(/Content-Type:.*?\n/gi);
+        // 가장 큰 텍스트 덩어리나 마지막 덩어리를 선택
         processed = parts.sort((a, b) => b.length - a.length)[0] || processed;
     }
 
@@ -53,7 +140,7 @@ function preprocessText(text) {
         .replace(/\r?\n|\r/g, ' ')
         .replace(/\s+/g, ' ')
         .trim()
-        .substring(0, 800);
+        .substring(0, 2000); // 배치 처리를 위해 길이를 약간 축소 (토큰 제한 방어)
 }
 
 /**
@@ -65,111 +152,114 @@ function isStaticBypass(subject) {
 }
 
 /**
- * 로컬 LocalAI API 통신 전용 함수 (Timeout 및 AbortController 포함)
- */
-async function callLocalAI(prompt) {
-    const controller = new AbortController();
-    const timeoutId = setTimeout(() => controller.abort(), 120000); // 120초 타임아웃
-
-    try {
-        const response = await fetch(LOCALAI_CONFIG.URL, {
-            method: 'POST',
-            headers: { 'Content-Type': 'application/json' },
-            body: JSON.stringify({
-                model: LOCALAI_CONFIG.MODEL,
-                messages: [
-                    { role: "user", content: prompt }
-                ],
-                response_format: { type: "json_object" },
-                temperature: 0.1, // 0.3에서 0.1로 하향하여 난수 배제 및 연산 가속
-                max_tokens: 150 // 불필요한 토큰 루프 및 연산 시간 방지
-            }),
-            signal: controller.signal
-        });
-
-        clearTimeout(timeoutId);
-
-        if (!response.ok) {
-            const errorText = await response.text();
-            throw new Error(`LocalAI API Error: ${response.status} ${response.statusText} - ${errorText}`);
-        }
-
-        const data = await response.json();
-        let content = data.choices[0].message.content.trim();
-        // markdown 코드 블록 감싸기 제거 대응
-        if (content.startsWith('```')) {
-            content = content.replace(/^```json\s*/i, '').replace(/```$/, '').trim();
-        }
-        return JSON.parse(content);
-    } catch (error) {
-        clearTimeout(timeoutId);
-        if (error.name === 'AbortError') {
-            throw new Error("LocalAI 추론 타임아웃 (120초 초과)");
-        }
-        throw error;
-    }
-}
-
-/**
- * [Task 2] 순차 요약 엔진 (Sequential Processing)
+ * [Task 2] 배치 요약 엔진 장착 (10x 멀티플라이어)
  */
 async function summarizeBatchWithLLM(texts) {
     if (!texts || texts.length === 0) return [];
 
-    const results = [];
-    const cleanTexts = texts.map(t => preprocessText(t));
+    try {
+        const cleanTexts = texts.map(t => preprocessText(t));
+        const ollamaUrl = await getResolvedOllamaUrl();
 
-    console.log(`[Local AI] 총 ${texts.length}건의 메일 순차 요약 시작...`);
+        const prompt = `다음은 ${texts.length}개의 이메일 본문 배열이다. 각 메일의 핵심을 1~2문장으로 요약하여 동일한 순서의 JSON 객체 배열로 반환하라.
+        
+        [반드시 지켜야 할 분류 지침]
+        1. '보안 경고', '비정상 로그인', '결제 알림', '2차 인증' 등은 priority: '긴급', action: '필요'로 분류하라.
+        2. '광고', '이벤트', '세미나', '뉴스레터'는 아무리 '마감 임박' 등의 문구가 있어도 priority: '낮음', action: '무시/선택'으로 분류하고 isAd: true를 설정하라.
+        3. 단순 공지사항이나 주간 보고 등은 priority: '보통', action: '참고'로 분류하라.
 
-    for (let i = 0; i < cleanTexts.length; i++) {
-        const text = cleanTexts[i];
-        let cooldownMs = 0; // 대안 1: 성공 시 대기 시간 0초로 로컬 서버 최고 속도 추출
-        try {
-            const prompt = `다음 이메일 본문을 분석하여 핵심 내용을 1문장으로 요약하고 분류 지침에 따라 JSON 객체로 반환하라.
-            
-            [분류 지침]
-            1. '보안 경고', '비정상 로그인', '결제 알림', '2차 인증' 등은 priority: '긴급', action: '필요'로 분류.
-            2. '광고', '이벤트', '뉴스레터' 등은 priority: '낮음', action: '불필요', isAd: true 설정.
-            3. 일반 공지나 보고서는 priority: '보통', action: '참고', isAd: false 설정.
+        [출력 JSON 스키마]
+        [
+          {
+            "summary": "1~2문장 요약 내용",
+            "action": "필요 | 참고 | 불필요",
+            "priority": "긴급 | 보통 | 낮음",
+            "isAd": true/false
+          },
+          ...
+        ]
 
-            [출력 JSON 형식]
-            {
-              "summary": "1줄 요약 내용",
-              "action": "필요 | 참고 | 불필요",
-              "priority": "긴급 | 보통 | 낮음",
-              "isAd": true/false
+        반드시 마크다운 코드 블록 없이 순수한 JSON 배열만 반환하라.
+
+        본문 데이터:
+        ${JSON.stringify(cleanTexts)}`;
+
+        const MAX_RETRIES = 3;
+        let delayMs = 5000;
+
+        for (let attempt = 0; attempt <= MAX_RETRIES; attempt++) {
+            try {
+                const controller = new AbortController();
+                const timeout = setTimeout(() => controller.abort(), 120000); // 120초 타임아웃 (로컬 LLM은 느릴 수 있음)
+
+                const response = await fetch(ollamaUrl, {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify({
+                        model: 'qwen2.5:3b',
+                        messages: [
+                            { role: 'user', content: prompt }
+                        ],
+                        temperature: 0.3,
+                        stream: false
+                    }),
+                    signal: controller.signal
+                });
+
+                clearTimeout(timeout);
+
+                if (!response.ok) {
+                    const errorText = await response.text();
+                    throw new Error(`Ollama API 응답 오류 (${response.status}): ${errorText}`);
+                }
+
+                const data = await response.json();
+                const responseText = (data.choices?.[0]?.message?.content || '').trim();
+
+                // JSON 추출 정규화 로직 (코드 블록 제거 및 방어)
+                const cleanJsonString = responseText
+                    .replace(/```json\s*/gi, '')
+                    .replace(/```\s*/g, '')
+                    .replace(/^[^\[]*/, '')  // JSON 배열 시작 전의 잡문 제거
+                    .replace(/[^\]]*$/, '')  // JSON 배열 종료 후의 잡문 제거
+                    .trim();
+                const summaries = JSON.parse(cleanJsonString);
+
+                if (Array.isArray(summaries) && summaries.length === texts.length) {
+                    console.log(`[Ollama Batch] ${texts.length}건 요약 성공 (qwen2.5:3b, API 1회 소모)`);
+                    return summaries;
+                }
+                throw new Error(`JSON 배열 파싱 실패 또는 길이 불일치 (기대: ${texts.length}, 수신: ${summaries.length})`);
+            } catch (apiErr) {
+                const isTimeout = apiErr.name === 'AbortError';
+                const isTransient = isTimeout ||
+                    apiErr.message.includes('ECONNREFUSED') ||
+                    apiErr.message.includes('ECONNRESET') ||
+                    apiErr.message.includes('503');
+
+                console.log(`[Ollama Batch Attempt ${attempt + 1}] Error: ${isTimeout ? 'Timeout (120s)' : apiErr.message}`);
+
+                if (isTransient && attempt < MAX_RETRIES) {
+                    // 네트워크 변경 감지를 위해 캐시 초기화
+                    resolvedOllamaUrl = null;
+                    console.log(`${delayMs / 1000}초 대기 후 재시도합니다... (Transient Error 대응)`);
+                    await new Promise(resolve => setTimeout(resolve, delayMs));
+                    delayMs *= 2;
+                    continue;
+                }
+                throw apiErr;
             }
-
-            이메일 본문:
-            ${text}`;
-
-            const summary = await callLocalAI(prompt);
-            results.push(summary);
-            console.log(`[Local AI] ${i + 1}/${cleanTexts.length} 요약 완료`);
-
-        } catch (err) {
-            console.error(`[Local AI Error] ${i + 1}번째 메일 요약 실패: ${err.message}`);
-            cooldownMs = 4000; // 에러 발생 시 엔진 재안정화를 위해 4초 대기
-            // Safe Fallback: 개별 실패 시 무결성 방어
-            results.push({
-                summary: "[AI 요약 지연] 분석 실패 또는 타임아웃",
-                action: "참고",
-                priority: "보통",
-                isAd: false
-            });
         }
-
-        // AI 서버 과부하 방지를 위한 휴지기 (마지막 루프 제외)
-        if (i < cleanTexts.length - 1 && cooldownMs > 0) {
-            await new Promise(resolve => setTimeout(resolve, cooldownMs));
-        }
+    } catch (err) {
+        // 최종 실패 시에도 캐시 초기화하여 다음 실행에서 재탐색 유도
+        resolvedOllamaUrl = null;
+        console.error(`[Ollama Batch Final Error] ${err.message}`);
+        return texts.map(() => null); // 전원 Safe Fallback 유도
     }
-
-    return results;
 }
 
 /**
- * 비동기 작업을 순차적으로 실행
+ * 비동기 작업을 순차적으로 실행 (Rate Limit 확보를 위해 2초 대기)
  */
 async function processInChunks(items, executor) {
     const results = [];
@@ -222,6 +312,7 @@ async function fetchGmailSummaries(auth) {
         const msg = await gmail.users.messages.get({ userId: 'me', id: m.id, format: 'raw' });
         const raw = Buffer.from(msg.data.raw, 'base64').toString();
 
+        // 표준 전처리 적용 (MIME 디코딩, HTML 제거 등)
         const parsed = await simpleParser(raw);
         const subject = parsed.subject || 'No Subject';
         const from = parsed.from?.text || 'Unknown';
@@ -231,6 +322,7 @@ async function fetchGmailSummaries(auth) {
         rawData.push({ id: m.id, date, from, subject, body });
     }
 
+    // 하이브리드 배치 처리 흐름
     const finalResults = [];
     const llmTargets = [];
     const llmIndices = [];
@@ -243,7 +335,7 @@ async function fetchGmailSummaries(auth) {
                 sender: item.from.split('<')[0].replace(/"/g, '').trim(),
                 subject: item.subject,
                 summary: "단순 알림 또는 수신 동의 확인 메일입니다.",
-                action: "불필요",
+                action: "무시/선택",
                 priority: "낮음",
                 isAd: true
             };
@@ -258,7 +350,7 @@ async function fetchGmailSummaries(auth) {
         llmIndices.forEach((originalIndex, i) => {
             const item = rawData[originalIndex];
             const result = summaries[i] || {
-                summary: "[AI 요약 지연] 분석 실패",
+                summary: "[AI 요약 지연] " + preprocessText(item.body).substring(0, 200) + "...",
                 action: "참고",
                 priority: "보통",
                 isAd: false
@@ -303,6 +395,7 @@ async function fetchNaverSummaries() {
         const today = new Date();
         today.setHours(0, 0, 0, 0);
 
+        // [Task 2] IMAP에서 메일의 전체 소스(Raw Source)를 수집하기 위해 bodies: [''] 설정
         const fetchOptions = {
             bodies: [''],
             struct: true
@@ -328,7 +421,10 @@ async function fetchNaverSummaries() {
             const rawPart = item.parts.find(p => p.which === '');
             if (!rawPart) continue;
 
+            // [Task 2] simpleParser를 통한 Base64/MIME 디코딩 수행
             const parsed = await simpleParser(rawPart.body);
+
+            // 텍스트 우선 추출, 없으면 HTML에서 태그 제거
             const cleanText = parsed.text || parsed.textAsHtml?.replace(/<[^>]*>/g, ' ') || '';
             const subject = parsed.subject || 'No Subject';
             const from = parsed.from?.text || 'Unknown';
@@ -337,10 +433,7 @@ async function fetchNaverSummaries() {
             rawData.push({ subject, from, date, body: cleanText });
         }
 
-        // ★ 수집 완료 즉시 IMAP 연결 종료 (Idle Timeout 방지)
-        connection.end();
-        console.log(`[Naver] IMAP 연결 종료 완료. ${rawData.length}건 오프라인 처리 시작.`);
-
+        // 하이브리드 배치 처리 흐름
         const finalResults = [];
         const llmTargets = [];
         const llmIndices = [];
@@ -353,7 +446,7 @@ async function fetchNaverSummaries() {
                     sender: item.from.split('<')[0].replace(/"/g, '').trim(),
                     subject: item.subject,
                     summary: "단순 알림 또는 수신 동의 확인 메일입니다.",
-                    action: "불필요",
+                    action: "무시/선택",
                     priority: "낮음",
                     isAd: true
                 };
@@ -368,7 +461,7 @@ async function fetchNaverSummaries() {
             llmIndices.forEach((originalIndex, i) => {
                 const item = rawData[originalIndex];
                 const result = summaries[i] || {
-                    summary: "[AI 요약 지연] 분석 실패",
+                    summary: "[AI 요약 지연] " + preprocessText(item.body).substring(0, 200) + "...",
                     action: "참고",
                     priority: "보통",
                     isAd: false
@@ -386,6 +479,7 @@ async function fetchNaverSummaries() {
             });
         }
 
+        connection.end();
         return finalResults.filter(r => r !== undefined);
     } catch (err) {
         console.error('[Naver Fetch Error]', err.message);
@@ -432,7 +526,9 @@ async function appendToDocs(auth, documentId, gmailSummaries, naverSummaries, cl
         currentIndex += gmailHeader.length;
 
         gmailSummaries.forEach(s => {
-            const actionLabel = `[${s.action}]`;
+            let actionText = s.action;
+            if (actionText === '무시/선택') actionText = '불필요';
+            const actionLabel = `[${actionText}]`;
             const item = `\n[${s.date}] ${s.sender} | ${s.subject}\n    ➔ 핵심 요약: ${s.summary}\n    ➔ 후속 조치: ${actionLabel}\n`;
             requests.push({ insertText: { endOfSegmentLocation: { segmentId: '' }, text: item } });
 
@@ -489,7 +585,9 @@ async function appendToDocs(auth, documentId, gmailSummaries, naverSummaries, cl
         currentIndex += naverHeader.length;
 
         naverSummaries.forEach(s => {
-            const actionLabel = `[${s.action}]`;
+            let actionText = s.action;
+            if (actionText === '무시/선택') actionText = '불필요';
+            const actionLabel = `[${actionText}]`;
             const item = `\n[${s.date}] ${s.sender} | ${s.subject}\n    ➔ 핵심 요약: ${s.summary}\n    ➔ 후속 조치: ${actionLabel}\n`;
             requests.push({ insertText: { endOfSegmentLocation: { segmentId: '' }, text: item } });
 
@@ -558,51 +656,12 @@ async function appendToDocs(auth, documentId, gmailSummaries, naverSummaries, cl
         }
     });
 
-    // --- [추가] 최종 작성 일시 타임스탬프 (KST) ---
-    const nowKST = new Date().toLocaleString('ko-KR', { 
-        timeZone: 'Asia/Seoul',
-        year: 'numeric',
-        month: '2-digit',
-        day: '2-digit',
-        hour: '2-digit',
-        minute: '2-digit',
-        second: '2-digit',
-        hour12: false 
-    }).replace(/\. /g, '-').replace(/\./g, '');
-    
-    const timestampLine = `\n최종 작성 일시: ${nowKST} (KST)\n`;
-    const timestampStart = currentIndex + stats.length;
-
-    requests.push({ insertText: { endOfSegmentLocation: { segmentId: '' }, text: timestampLine } });
-
-    // 스타일 설정: 9PT, 이탤릭, 짙은 회색
-    requests.push({
-        updateTextStyle: {
-            range: { startIndex: timestampStart, endIndex: timestampStart + timestampLine.length },
-            textStyle: {
-                fontSize: { magnitude: 9, unit: 'PT' },
-                italic: true,
-                foregroundColor: { color: { rgbColor: { red: 0.4, green: 0.4, blue: 0.4 } } }
-            },
-            fields: 'fontSize,italic,foregroundColor'
-        }
-    });
-
-    // 정렬 설정: 오른쪽 정렬
-    requests.push({
-        updateParagraphStyle: {
-            range: { startIndex: timestampStart, endIndex: timestampStart + timestampLine.length },
-            paragraphStyle: { alignment: 'END' },
-            fields: 'alignment'
-        }
-    });
-
     await docs.documents.batchUpdate({
         documentId: documentId,
         requestBody: { requests }
     });
 
-    console.log(`[Docs] 스타일 적용된 보고서 기록 완료`);
+    console.log(`[Docs] 스타일 적용된 보고서 기록 완료: ${documentId}`);
 }
 
 async function clearDocContents(auth, documentId) {
@@ -715,7 +774,7 @@ async function main() {
             cleanupNaver()
         ]);
 
-        console.log('[Step 2] 메일 요약 데이터 추출 중 (LocalAI)...');
+        console.log('[Step 2] 메일 요약 데이터 추출 중 (Ollama qwen2.5:3b)...');
         const gmailData = await fetchGmailSummaries(auth);
         const naverData = await fetchNaverSummaries();
 
