@@ -28,3 +28,13 @@
   - `Mail-Automation-localAI.git` 원격 저장소의 `main` 브랜치로 푸시 완료.
 - **특이 사항**:
   - 로컬에 유사한 이름의 `Mail-Automator` 폴더가 있어 이전 에이전트들의 경로 판단에 혼선이 있었으나, 현재 기준 폴더를 `Mail-Automator_gemma4`로 명확히 단일화하여 문서 및 환경을 모두 동기화 완료했습니다.
+
+### 2026-06-06 세션 (카카오 잔재 청산 및 텔레그램 가이드 보완)
+- **수행 작업**:
+  1. **카카오 잔재 완벽 청산**: README.md, .gitignore, .env.example에서 불필요한 카카오톡 알림 관련 기술 스택 설명, Python 의존성(pip install) 가이드, 및 kakao_token.json 설정을 완전히 제거했습니다.
+  2. **구글 자격증명 가이드 보완**: README.md에 credentials.json 발급 프로세스(Gmail, Docs, Drive API 활성화 및 데스크톱 앱 클라이언트 ID 다운로드)와 	oken.json 최초 자동 생성 프로세스(Authorization Code 입력)의 상세 가이드를 보완 작성했습니다.
+  3. **구글 독스 출력 서식 동기화**: src/summarize.js 내 정리 통계 블록의 글머리 기호 -를 구글 독스 포맷 규정에 맞게 제거(순수 텍스트 줄바꿈 형태로 정규화)하여 스타일 일관성을 확보했습니다.
+- **성공 단계**:
+  - Mail-Automator_gemma4 기준 폴더의 모든 변경 사항을 원격 저장소(origin/main)에 푸시 완료.
+- **특이 사항**:
+  - src/cleanup.js의 rom:kakao 조건은 스팸 메일 오탐지 방지 목적의 정상 필터 로직이므로 검수 결과 의도적으로 유지(수정 제외)했습니다.
