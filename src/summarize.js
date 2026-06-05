@@ -157,7 +157,7 @@ function isStaticBypass(subject) {
 async function summarizeBatchWithLLM(texts) {
     if (!texts || texts.length === 0) return [];
 
-    const CHUNK_SIZE = 3; // 배치 크기 제한 (10건 -> 3건 단위로 쪼갬)
+    const CHUNK_SIZE = 1; // 배치 크기 제한 (1건씩 순차 처리하여 LLM 부하 최소화)
     const results = [];
 
     for (let i = 0; i < texts.length; i += CHUNK_SIZE) {
@@ -200,13 +200,13 @@ async function summarizeChunkWithLLM(texts) {
         본문 데이터:
         ${JSON.stringify(cleanTexts)}`;
 
-        const MAX_RETRIES = 1; // 연산 병목에 따른 재시도 낭비 최소화
+        const MAX_RETRIES = 0; // 연산 병목에 따른 재시도 낭비 최소화 (타임아웃 시 즉시 Fallback)
         let delayMs = 3000;
 
         for (let attempt = 0; attempt <= MAX_RETRIES; attempt++) {
             try {
                 const controller = new AbortController();
-                const timeout = setTimeout(() => controller.abort(), 45000); // 45초 타임아웃 (3건 배치는 45초면 충분함)
+                const timeout = setTimeout(() => controller.abort(), 60000); // 60초 타임아웃 (1건당 60초 제공)
 
                 const response = await fetch(ollamaUrl, {
                     method: 'POST',
@@ -253,7 +253,7 @@ async function summarizeChunkWithLLM(texts) {
                     apiErr.message.includes('ECONNRESET') ||
                     apiErr.message.includes('503');
 
-                console.log(`[Ollama Batch Attempt ${attempt + 1}] Error: ${isTimeout ? 'Timeout (45s)' : apiErr.message}`);
+                console.log(`[Ollama Batch Attempt ${attempt + 1}] Error: ${isTimeout ? 'Timeout (60s)' : apiErr.message}`);
 
                 if (isTransient && attempt < MAX_RETRIES) {
                     resolvedOllamaUrl = null;
