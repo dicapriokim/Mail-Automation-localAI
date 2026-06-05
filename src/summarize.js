@@ -633,9 +633,9 @@ async function appendToDocs(auth, documentId, gmailSummaries, naverSummaries, cl
 
     const totalSummarized = gmailSummaries.length + (naverSummaries || []).length;
     const stats = `\n📊 금주 정리 통계\n` +
-        `- Gmail: ${cleanupStats.gmail.count}건 삭제 (예: ${cleanupStats.gmail.details})\n` +
-        `- Naver: ${cleanupStats.naver.count}건 삭제 (예: ${cleanupStats.naver.details})\n` +
-        `- 작업 결과: 핵심 뉴스레터 및 주문/배송 관련 메일 ${totalSummarized}건 정규화 완료\n`;
+        `Gmail: ${cleanupStats.gmail.count}건 삭제 (예: ${cleanupStats.gmail.details})\n` +
+        `Naver: ${cleanupStats.naver.count}건 삭제 (예: ${cleanupStats.naver.details})\n` +
+        `작업 결과: 핵심 뉴스레터 및 주문/배송 관련 메일 ${totalSummarized}건 정규화 완료\n`;
 
     requests.push({ insertText: { endOfSegmentLocation: { segmentId: '' }, text: stats } });
     requests.push({
