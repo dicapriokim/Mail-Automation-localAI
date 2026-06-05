@@ -46,7 +46,13 @@ Proxmox LXC 템플릿 생성부터 GPU 패스스루 설정, Ollama 엔진 설치
 > * **분리 운영 (권장)**: AI 백엔드(Ollama)와 본 서비스(Mail-Automator)를 서로 다른 LXC로 구동하면 AI 연산 시 발생하는 자원 점유율(CPU/VRAM) 스파이크로부터 메일 서비스를 안전하게 격리할 수 있습니다.
 > * **통합 운영 (대안)**: 하드웨어 자원이 제한적인 경우 하나의 LXC에 통합하여 구동해도 무방합니다. 이 경우 네트워크 탐색 없이 `127.0.0.1:11434` (localhost)로 빠르고 단순하게 통신할 수 있으나, 컨테이너에 충분한 리소스(RAM 등) 할당이 필요합니다.
 
-- Node.js 설치 (v18+)
+- **Node.js 설치 (v18+)**
+  * *LXC/Ubuntu 서버 환경의 경우*:
+    ```bash
+    # Node.js 20.x 설치 저장소 추가 및 패키지 설치
+    curl -fsSL https://deb.nodesource.com/setup_20.x | sudo -E bash -
+    sudo apt-get install -y nodejs build-essential
+    ```
 - **구글 API 인증 JSON 파일 준비 및 연동 가이드**
   - **1) `credentials.json` 발급 (GCP 콘솔)**:
     1. [구글 클라우드 콘솔](https://console.cloud.google.com/)에 접속하여 프로젝트를 생성합니다.
@@ -81,7 +87,8 @@ Proxmox LXC 템플릿 생성부터 GPU 패스스루 설정, Ollama 엔진 설치
   - **3) 봇 활성화 (중요)**:
     * 봇이 메시지를 보내기 위해서는 사용자가 먼저 봇 대화방에서 **[시작]** 또는 `/start`를 전송해야 소켓 채널이 열립니다.
 
-### 2. 설치
+### 2. 설치 (Installation)
+원하는 경로에서 저장소를 복사하고 의존성을 설치합니다. (LXC/서버 환경의 경우 `/opt` 등 권장 경로로 이동하여 진행)
 ```bash
 git clone https://github.com/dicapriokim/Mail-Automation-localAI.git Mail-Automator
 cd Mail-Automator
@@ -103,50 +110,21 @@ TELEGRAM_CHAT_ID=your_chat_id
 # [선택] 로컬 AI 서버 (Ollama) - 미설정 시 mDNS/서브넷 스캔으로 자동 탐색
 LOCAL_AI_IP=192.168.0.100
 ```
+*GCP 콘솔에서 발급받은 `credentials.json`과 최초 인증으로 생성되는 `token.json`도 동일한 프로젝트 루트 경로에 위치해야 합니다. (서버/LXC 환경의 경우 로컬에서 생성한 파일들을 해당 경로로 복사하여 사용 가능)*
 
-### 4. 실행 (Execution)
+### 4. 실행 및 자동화 (Execution & Automation)
+
+#### 1) 수동 즉시 실행
 ```bash
 node index.js
 ```
 
-### 5. LXC 환경 설치 및 크론탭 자동화 가이드
-LXC 컨테이너(Ubuntu) 환경에 직접 설치하여 매일 정기적으로 메일 수집 비서를 자동화 구동하려는 경우 아래 단계를 따르십시오.
-
-#### 1) 필수 패키지 및 Node.js 설치
-```bash
-# 시스템 패키지 업데이트 및 빌드 도구 설치
-apt update && apt upgrade -y
-apt install git curl build-essential -y
-
-# Node.js 20.x 설치 스크립트 다운로드 및 저장소 추가
-curl -fsSL https://deb.nodesource.com/setup_20.x | sudo -E bash -
-
-# Node.js 패키지 설치
-sudo apt-get install -y nodejs
-
-# 설치 버전 확인 (v20.x.x 이상 확인)
-node -v
-```
-
-#### 2) 프로젝트 설치 및 의존성 다운로드
-```bash
-cd /opt
-git clone https://github.com/dicapriokim/Mail-Automation-localAI.git Mail-Automator
-cd Mail-Automator
-npm install
-```
-
-#### 3) 환경 변수 및 구글 인증 자격증명 복사
-* `/opt/Mail-Automator/.env` 파일을 생성하고 본인의 메일 및 토큰 환경 설정을 작성합니다.
-* 외부에서 발급받은 `credentials.json`과 `token.json` 파일을 `/opt/Mail-Automator/` 루트 경로에 복사합니다.
-* `token.json`이 존재하지 않는 경우 터미널에서 최초 1회 수동 실행(`node index.js`)하여 나타나는 인증 URL에 접속하고 로그인 권한을 허용하여 생성합니다.
-
-#### 4) 크론탭(Crontab) 정기 스케줄러 등록
+#### 2) LXC/서버 환경 크론탭(Crontab) 자동화
 매일 정해진 시간(예: 매일 오전 9시 정각)에 메일 비서가 자동으로 메일을 수집하고 보고서를 작성하도록 시스템 크론을 구성합니다.
 ```bash
 crontab -e
 ```
-설정 최하단에 아래 실행 행을 추가하고 저장합니다:
+설정 최하단에 아래 실행 행을 추가하고 저장합니다 (Node.js 실행 절대경로 및 프로젝트 경로를 자신의 환경에 맞게 지정):
 ```cron
 00 09 * * * cd /opt/Mail-Automator && /usr/bin/node index.js >> /opt/Mail-Automator/cron.log 2>&1
 ```
