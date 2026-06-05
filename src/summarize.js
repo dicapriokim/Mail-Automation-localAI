@@ -140,7 +140,7 @@ function preprocessText(text) {
         .replace(/\r?\n|\r/g, ' ')
         .replace(/\s+/g, ' ')
         .trim()
-        .substring(0, 2000); // 배치 처리를 위해 길이를 약간 축소 (토큰 제한 방어)
+        .substring(0, 1200); // 배치 처리를 위해 길이를 약간 축소 (토큰 제한 방어)
 }
 
 /**
@@ -155,6 +155,22 @@ function isStaticBypass(subject) {
  * [Task 2] 배치 요약 엔진 장착 (10x 멀티플라이어)
  */
 async function summarizeBatchWithLLM(texts) {
+    if (!texts || texts.length === 0) return [];
+
+    const CHUNK_SIZE = 3; // 배치 크기 제한 (10건 -> 3건 단위로 쪼갬)
+    const results = [];
+
+    for (let i = 0; i < texts.length; i += CHUNK_SIZE) {
+        const chunk = texts.slice(i, i + CHUNK_SIZE);
+        console.log(`[Ollama Batch] ${texts.length}건 중 ${i + 1}~${Math.min(i + CHUNK_SIZE, texts.length)}번째 메일 요약 처리 중...`);
+        const chunkSummaries = await summarizeChunkWithLLM(chunk);
+        results.push(...chunkSummaries);
+    }
+    
+    return results;
+}
+
+async function summarizeChunkWithLLM(texts) {
     if (!texts || texts.length === 0) return [];
 
     try {
@@ -184,13 +200,13 @@ async function summarizeBatchWithLLM(texts) {
         본문 데이터:
         ${JSON.stringify(cleanTexts)}`;
 
-        const MAX_RETRIES = 3;
-        let delayMs = 5000;
+        const MAX_RETRIES = 1; // 연산 병목에 따른 재시도 낭비 최소화
+        let delayMs = 3000;
 
         for (let attempt = 0; attempt <= MAX_RETRIES; attempt++) {
             try {
                 const controller = new AbortController();
-                const timeout = setTimeout(() => controller.abort(), 120000); // 120초 타임아웃 (로컬 LLM은 느릴 수 있음)
+                const timeout = setTimeout(() => controller.abort(), 45000); // 45초 타임아웃 (3건 배치는 45초면 충분함)
 
                 const response = await fetch(ollamaUrl, {
                     method: 'POST',
@@ -218,15 +234,15 @@ async function summarizeBatchWithLLM(texts) {
 
                 // JSON 추출 정규화 로직 (코드 블록 제거 및 방어)
                 const cleanJsonString = responseText
-                    .replace(/```json\s*/gi, '')
-                    .replace(/```\s*/g, '')
+                    .replace(/\`\`\`json\s*/gi, '')
+                    .replace(/\`\`\`\s*/g, '')
                     .replace(/^[^\[]*/, '')  // JSON 배열 시작 전의 잡문 제거
                     .replace(/[^\]]*$/, '')  // JSON 배열 종료 후의 잡문 제거
                     .trim();
                 const summaries = JSON.parse(cleanJsonString);
 
                 if (Array.isArray(summaries) && summaries.length === texts.length) {
-                    console.log(`[Ollama Batch] ${texts.length}건 요약 성공 (qwen2.5:3b, API 1회 소모)`);
+                    console.log(`[Ollama Batch] ${texts.length}건 중 요약 성공 (qwen2.5:3b, API 1회 소모)`);
                     return summaries;
                 }
                 throw new Error(`JSON 배열 파싱 실패 또는 길이 불일치 (기대: ${texts.length}, 수신: ${summaries.length})`);
@@ -237,10 +253,9 @@ async function summarizeBatchWithLLM(texts) {
                     apiErr.message.includes('ECONNRESET') ||
                     apiErr.message.includes('503');
 
-                console.log(`[Ollama Batch Attempt ${attempt + 1}] Error: ${isTimeout ? 'Timeout (120s)' : apiErr.message}`);
+                console.log(`[Ollama Batch Attempt ${attempt + 1}] Error: ${isTimeout ? 'Timeout (45s)' : apiErr.message}`);
 
                 if (isTransient && attempt < MAX_RETRIES) {
-                    // 네트워크 변경 감지를 위해 캐시 초기화
                     resolvedOllamaUrl = null;
                     console.log(`${delayMs / 1000}초 대기 후 재시도합니다... (Transient Error 대응)`);
                     await new Promise(resolve => setTimeout(resolve, delayMs));
@@ -251,16 +266,12 @@ async function summarizeBatchWithLLM(texts) {
             }
         }
     } catch (err) {
-        // 최종 실패 시에도 캐시 초기화하여 다음 실행에서 재탐색 유도
         resolvedOllamaUrl = null;
         console.error(`[Ollama Batch Final Error] ${err.message}`);
         return texts.map(() => null); // 전원 Safe Fallback 유도
     }
 }
 
-/**
- * 비동기 작업을 순차적으로 실행 (Rate Limit 확보를 위해 2초 대기)
- */
 async function processInChunks(items, executor) {
     const results = [];
     for (const item of items) {
