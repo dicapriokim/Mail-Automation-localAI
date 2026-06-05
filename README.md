@@ -81,6 +81,49 @@ LOCAL_AI_IP=192.168.0.100
 node index.js
 ```
 
+### 5. LXC 환경 설치 및 크론탭 자동화 가이드
+LXC 컨테이너(Ubuntu) 환경에 직접 설치하여 매일 정기적으로 메일 수집 비서를 자동화 구동하려는 경우 아래 단계를 따르십시오.
+
+#### 1) 필수 패키지 및 Node.js 설치
+```bash
+# 시스템 패키지 업데이트 및 빌드 도구 설치
+apt update && apt upgrade -y
+apt install git curl build-essential python3 python3-pip -y
+
+# Node.js 20.x 설치 스크립트 다운로드 및 저장소 추가
+curl -fsSL https://deb.nodesource.com/setup_20.x | sudo -E bash -
+
+# Node.js 패키지 설치
+sudo apt-get install -y nodejs
+
+# 설치 버전 확인 (v20.x.x 이상 확인)
+node -v
+```
+
+#### 2) 프로젝트 설치 및 의존성 다운로드
+```bash
+cd /opt
+git clone https://github.com/dicapriokim/Mail-Automation-localAI.git Mail-Automator
+cd Mail-Automator
+npm install
+pip install requests python-dotenv
+```
+
+#### 3) 환경 변수 및 구글 인증 자격증명 복사
+* `/opt/Mail-Automator/.env` 파일을 생성하고 본인의 메일 및 토큰 환경 설정을 작성합니다.
+* 외부에서 발급받은 `credentials.json`과 `token.json` 파일을 `/opt/Mail-Automator/` 루트 경로에 복사합니다.
+* `token.json`이 존재하지 않는 경우 터미널에서 최초 1회 수동 실행(`node index.js`)하여 나타나는 인증 URL에 접속하고 로그인 권한을 허용하여 생성합니다.
+
+#### 4) 크론탭(Crontab) 정기 스케줄러 등록
+매일 정해진 시간(예: 매일 오전 9시 정각)에 메일 비서가 자동으로 메일을 수집하고 보고서를 작성하도록 시스템 크론을 구성합니다.
+```bash
+crontab -e
+```
+설정 최하단에 아래 실행 행을 추가하고 저장합니다:
+```cron
+00 09 * * * cd /opt/Mail-Automator && /usr/bin/node index.js >> /opt/Mail-Automator/cron.log 2>&1
+```
+
 ---
 
 ## 📊 보고서 예시 (Sample Report)
