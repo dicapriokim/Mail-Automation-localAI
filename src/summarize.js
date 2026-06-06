@@ -212,7 +212,7 @@ async function summarizeChunkWithLLM(texts) {
                     method: 'POST',
                     headers: { 'Content-Type': 'application/json' },
                     body: JSON.stringify({
-                        model: 'qwen2.5:3b',
+                        model: process.env.OLLAMA_MODEL || 'llama3.2:1b',
                         messages: [
                             { role: 'user', content: prompt }
                         ],
@@ -242,7 +242,7 @@ async function summarizeChunkWithLLM(texts) {
                 const summaries = JSON.parse(cleanJsonString);
 
                 if (Array.isArray(summaries) && summaries.length === texts.length) {
-                    console.log(`[Ollama Batch] ${texts.length}건 중 요약 성공 (qwen2.5:3b, API 1회 소모)`);
+                    console.log(`[Ollama Batch] ${texts.length}건 중 요약 성공 (${process.env.OLLAMA_MODEL || 'llama3.2:1b'}, API 1회 소모)`);
                     return summaries;
                 }
                 throw new Error(`JSON 배열 파싱 실패 또는 길이 불일치 (기대: ${texts.length}, 수신: ${summaries.length})`);
