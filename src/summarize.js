@@ -157,7 +157,7 @@ function isStaticBypass(subject) {
 async function summarizeBatchWithLLM(texts) {
     if (!texts || texts.length === 0) return [];
 
-    const CHUNK_SIZE = 1; // 배치 크기 제한 (1건씩 순차 처리하여 LLM 부하 최소화)
+    const CHUNK_SIZE = 3; // 배치 크기 제한 (GPU 가속 활성화 확인으로 3건 단위 배치 병렬화)
     const results = [];
 
     for (let i = 0; i < texts.length; i += CHUNK_SIZE) {
