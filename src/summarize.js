@@ -19,7 +19,7 @@ let resolvedOllamaUrl = null;
  * @param {number} timeout - 연결 타임아웃(ms)
  * @returns {Promise<boolean>} 연결 성공 여부
  */
-function testTcpConnection(host, port, timeout = 300) {
+function testTcpConnection(host, port, timeout = 800) {
     return new Promise((resolve) => {
         const socket = new net.Socket();
         let status = false;
@@ -256,7 +256,8 @@ async function summarizeChunkWithLLM(texts) {
                 console.log(`[Ollama Batch Attempt ${attempt + 1}] Error: ${isTimeout ? 'Timeout (60s)' : apiErr.message}`);
 
                 if (isTransient && attempt < MAX_RETRIES) {
-                    resolvedOllamaUrl = null;
+                    // 일시적인 API 통신 타임아웃 발생 시에도 탐색 성공한 IP 캐시는 유지하여 불필요한 재탐색으로 인한 localhost 폴백 방지
+                    // resolvedOllamaUrl = null;
                     console.log(`${delayMs / 1000}초 대기 후 재시도합니다... (Transient Error 대응)`);
                     await new Promise(resolve => setTimeout(resolve, delayMs));
                     delayMs *= 2;
@@ -266,7 +267,8 @@ async function summarizeChunkWithLLM(texts) {
             }
         }
     } catch (err) {
-        resolvedOllamaUrl = null;
+        // 최종 실패 시에도 IP 캐시를 보존하여 다음 메일 처리 시 즉시 통신 시도하도록 유지
+        // resolvedOllamaUrl = null;
         console.error(`[Ollama Batch Final Error] ${err.message}`);
         return texts.map(() => null); // 전원 Safe Fallback 유도
     }
