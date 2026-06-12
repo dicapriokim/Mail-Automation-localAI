@@ -43,7 +43,7 @@ async function scanSubnetForOllama() {
     for (let i = 1; i < 255; i++) {
         const ip = `192.168.0.${i}`;
         promises.push(
-            testTcpConnection(ip, 11434, 200).then(isOpen => isOpen ? ip : null)
+            testTcpConnection(ip, 11434, 400).then(isOpen => isOpen ? ip : null)
         );
     }
     const results = await Promise.all(promises);
@@ -157,7 +157,7 @@ function isStaticBypass(subject) {
 async function summarizeBatchWithLLM(texts) {
     if (!texts || texts.length === 0) return [];
 
-    const CHUNK_SIZE = 3; // 배치 크기 제한 (GPU 가속 활성화 확인으로 3건 단위 배치 병렬화)
+    const CHUNK_SIZE = 1; // CPU 연산 한계 및 3b 모델 환각(Hallucination) 방지를 위해 1건 단위 처리
     const results = [];
 
     for (let i = 0; i < texts.length; i += CHUNK_SIZE) {
@@ -200,13 +200,13 @@ async function summarizeChunkWithLLM(texts) {
         본문 데이터:
         ${JSON.stringify(cleanTexts)}`;
 
-        const MAX_RETRIES = 0; // 연산 병목에 따른 재시도 낭비 최소화 (타임아웃 시 즉시 Fallback)
+        const MAX_RETRIES = 1; // JSON 파싱 실패 또는 일시적 타임아웃 시 1회 재시도 허용
         let delayMs = 3000;
 
         for (let attempt = 0; attempt <= MAX_RETRIES; attempt++) {
             try {
                 const controller = new AbortController();
-                const timeout = setTimeout(() => controller.abort(), 60000); // 60초 타임아웃 (1건당 60초 제공)
+                const timeout = setTimeout(() => controller.abort(), 120000); // 120초 타임아웃 (N150 CPU 한계 고려)
 
                 const response = await fetch(ollamaUrl, {
                     method: 'POST',
@@ -233,27 +233,39 @@ async function summarizeChunkWithLLM(texts) {
                 const responseText = (data.choices?.[0]?.message?.content || '').trim();
 
                 // JSON 추출 정규화 로직 (코드 블록 제거 및 방어)
-                const cleanJsonString = responseText
+                let cleanJsonString = responseText
                     .replace(/\`\`\`json\s*/gi, '')
                     .replace(/\`\`\`\s*/g, '')
-                    .replace(/^[^\[]*/, '')  // JSON 배열 시작 전의 잡문 제거
-                    .replace(/[^\]]*$/, '')  // JSON 배열 종료 후의 잡문 제거
                     .trim();
-                const summaries = JSON.parse(cleanJsonString);
+                
+                const match = cleanJsonString.match(/[\{\[][\s\S]*[\}\]]/);
+                if (match) {
+                    cleanJsonString = match[0];
+                }
 
+                let summaries = JSON.parse(cleanJsonString);
+
+                // 만약 단일 객체로 반환했다면 배열로 감싸기
+                if (!Array.isArray(summaries) && typeof summaries === 'object' && summaries !== null) {
+                    summaries = [summaries];
+                }
+
+                // 빈 배열이 반환되거나 길이가 안 맞을 경우 에러 발생
                 if (Array.isArray(summaries) && summaries.length === texts.length) {
                     console.log(`[Ollama Batch] ${texts.length}건 중 요약 성공 (${process.env.OLLAMA_MODEL || 'llama3.2:1b'}, API 1회 소모)`);
                     return summaries;
                 }
-                throw new Error(`JSON 배열 파싱 실패 또는 길이 불일치 (기대: ${texts.length}, 수신: ${summaries.length})`);
+                throw new Error(`JSON 배열 파싱 실패 또는 길이 불일치 (기대: ${texts.length}, 수신: ${summaries ? summaries.length : 0})`);
             } catch (apiErr) {
                 const isTimeout = apiErr.name === 'AbortError';
                 const isTransient = isTimeout ||
                     apiErr.message.includes('ECONNREFUSED') ||
                     apiErr.message.includes('ECONNRESET') ||
-                    apiErr.message.includes('503');
+                    apiErr.message.includes('503') ||
+                    apiErr.message.includes('JSON 배열 파싱 실패') ||
+                    apiErr instanceof SyntaxError; // JSON.parse 에러도 재시도 포함
 
-                console.log(`[Ollama Batch Attempt ${attempt + 1}] Error: ${isTimeout ? 'Timeout (60s)' : apiErr.message}`);
+                console.log(`[Ollama Batch Attempt ${attempt + 1}] Error: ${isTimeout ? 'Timeout (120s)' : apiErr.message}`);
 
                 if (isTransient && attempt < MAX_RETRIES) {
                     // 일시적인 API 통신 타임아웃 발생 시에도 탐색 성공한 IP 캐시는 유지하여 불필요한 재탐색으로 인한 localhost 폴백 방지
@@ -299,9 +311,68 @@ async function processMailBody(body) {
 }
 
 /**
- * [Task 3] 지메일 요약 데이터 추출 (하이브리드 배치 개편)
+ * [공통] 하이브리드 배치 처리 - 정적 필터링 + LLM 요약
+ * 수집된 rawData를 받아 정적 필터링 후 LLM 요약을 적용합니다.
+ * @param {Array} rawData - { date, from, subject, body } 배열
+ * @param {string} channelName - 로그용 채널명 ('Gmail' 또는 'Naver')
+ * @returns {Promise<Array>} 최종 요약 결과 배열
  */
-async function fetchGmailSummaries(auth) {
+async function applyHybridLLMSummaries(rawData, channelName) {
+    const finalResults = [];
+    const llmTargets = [];
+    const llmIndices = [];
+
+    rawData.forEach((item, index) => {
+        if (isStaticBypass(item.subject)) {
+            console.log(`[Bypass] 정적 필터링 적용: ${item.subject.substring(0, 20)}...`);
+            finalResults[index] = {
+                date: new Date(item.date).toLocaleDateString('ko-KR'),
+                sender: item.from.split('<')[0].replace(/"/g, '').trim(),
+                subject: item.subject,
+                summary: "단순 알림 또는 수신 동의 확인 메일입니다.",
+                action: "무시/선택",
+                priority: "낮음",
+                isAd: true
+            };
+        } else {
+            llmTargets.push(item.body);
+            llmIndices.push(index);
+        }
+    });
+
+    if (llmTargets.length > 0) {
+        console.log(`[${channelName}] LLM 요약 대상: ${llmTargets.length}건`);
+        const summaries = await summarizeBatchWithLLM(llmTargets);
+        llmIndices.forEach((originalIndex, i) => {
+            const item = rawData[originalIndex];
+            const result = summaries[i] || {
+                summary: "[AI 요약 지연] " + preprocessText(item.body).substring(0, 200) + "...",
+                action: "참고",
+                priority: "보통",
+                isAd: false
+            };
+
+            finalResults[originalIndex] = {
+                date: new Date(item.date).toLocaleDateString('ko-KR'),
+                sender: item.from.split('<')[0].replace(/"/g, '').trim(),
+                subject: item.subject,
+                summary: result.summary,
+                action: result.action,
+                priority: result.priority,
+                isAd: result.isAd
+            };
+        });
+    }
+
+    return finalResults.filter(r => r !== undefined);
+}
+
+/**
+ * [Task 3-1] 지메일 원문 수집 (네트워크 I/O 단계)
+ * Gmail API를 통해 메일 원문을 수집하고 MIME 파싱까지만 수행합니다.
+ * LLM 요약은 포함하지 않습니다.
+ */
+async function fetchGmailRawData(auth) {
     const gmail = google.gmail({ version: 'v1', auth });
 
     // 메일 수집 로직 (기존 유지)
@@ -335,59 +406,25 @@ async function fetchGmailSummaries(auth) {
         rawData.push({ id: m.id, date, from, subject, body });
     }
 
-    // 하이브리드 배치 처리 흐름
-    const finalResults = [];
-    const llmTargets = [];
-    const llmIndices = [];
-
-    rawData.forEach((item, index) => {
-        if (isStaticBypass(item.subject)) {
-            console.log(`[Bypass] 정적 필터링 적용: ${item.subject.substring(0, 20)}...`);
-            finalResults[index] = {
-                date: new Date(item.date).toLocaleDateString('ko-KR'),
-                sender: item.from.split('<')[0].replace(/"/g, '').trim(),
-                subject: item.subject,
-                summary: "단순 알림 또는 수신 동의 확인 메일입니다.",
-                action: "무시/선택",
-                priority: "낮음",
-                isAd: true
-            };
-        } else {
-            llmTargets.push(item.body);
-            llmIndices.push(index);
-        }
-    });
-
-    if (llmTargets.length > 0) {
-        const summaries = await summarizeBatchWithLLM(llmTargets);
-        llmIndices.forEach((originalIndex, i) => {
-            const item = rawData[originalIndex];
-            const result = summaries[i] || {
-                summary: "[AI 요약 지연] " + preprocessText(item.body).substring(0, 200) + "...",
-                action: "참고",
-                priority: "보통",
-                isAd: false
-            };
-
-            finalResults[originalIndex] = {
-                date: new Date(item.date).toLocaleDateString('ko-KR'),
-                sender: item.from.split('<')[0].replace(/"/g, '').trim(),
-                subject: item.subject,
-                summary: result.summary,
-                action: result.action,
-                priority: result.priority,
-                isAd: result.isAd
-            };
-        });
-    }
-
-    return finalResults.filter(r => r !== undefined);
+    return rawData;
 }
 
 /**
- * [Task 3] 네이버 메일 요약 데이터 추출 (하이브리드 배치 개편)
+ * [Task 3] 지메일 요약 데이터 추출 (하이브리드 배치 개편)
+ * 하위 호환 유지: 기존 호출부에서 fetchGmailSummaries(auth)로 호출 가능
  */
-async function fetchNaverSummaries() {
+async function fetchGmailSummaries(auth) {
+    const rawData = await fetchGmailRawData(auth);
+    return applyHybridLLMSummaries(rawData, 'Gmail');
+}
+
+/**
+ * [Task 3-1] 네이버 메일 원문 수집 (네트워크 I/O 단계)
+ * Naver IMAP을 통해 메일 원문을 수집하고 MIME 파싱까지만 수행합니다.
+ * LLM 요약은 포함하지 않습니다.
+ * @returns {Promise<Array>} rawData 배열, 에러 시 빈 배열
+ */
+async function fetchNaverRawData() {
     if (!process.env.NAVER_ID || !process.env.NAVER_PW) return [];
 
     const config = {
@@ -446,58 +483,21 @@ async function fetchNaverSummaries() {
             rawData.push({ subject, from, date, body: cleanText });
         }
 
-        // 하이브리드 배치 처리 흐름
-        const finalResults = [];
-        const llmTargets = [];
-        const llmIndices = [];
-
-        rawData.forEach((item, index) => {
-            if (isStaticBypass(item.subject)) {
-                console.log(`[Bypass] 정적 필터링 적용: ${item.subject.substring(0, 20)}...`);
-                finalResults[index] = {
-                    date: new Date(item.date).toLocaleDateString('ko-KR'),
-                    sender: item.from.split('<')[0].replace(/"/g, '').trim(),
-                    subject: item.subject,
-                    summary: "단순 알림 또는 수신 동의 확인 메일입니다.",
-                    action: "무시/선택",
-                    priority: "낮음",
-                    isAd: true
-                };
-            } else {
-                llmTargets.push(item.body);
-                llmIndices.push(index);
-            }
-        });
-
-        if (llmTargets.length > 0) {
-            const summaries = await summarizeBatchWithLLM(llmTargets);
-            llmIndices.forEach((originalIndex, i) => {
-                const item = rawData[originalIndex];
-                const result = summaries[i] || {
-                    summary: "[AI 요약 지연] " + preprocessText(item.body).substring(0, 200) + "...",
-                    action: "참고",
-                    priority: "보통",
-                    isAd: false
-                };
-
-                finalResults[originalIndex] = {
-                    date: new Date(item.date).toLocaleDateString('ko-KR'),
-                    sender: item.from.split('<')[0].replace(/"/g, '').trim(),
-                    subject: item.subject,
-                    summary: result.summary,
-                    action: result.action,
-                    priority: result.priority,
-                    isAd: result.isAd
-                };
-            });
-        }
-
         connection.end();
-        return finalResults.filter(r => r !== undefined);
+        return rawData;
     } catch (err) {
         console.error('[Naver Fetch Error]', err.message);
         return [];
     }
+}
+
+/**
+ * [Task 3] 네이버 메일 요약 데이터 추출 (하이브리드 배치 개편)
+ * 하위 호환 유지: 기존 호출부에서 fetchNaverSummaries()로 호출 가능
+ */
+async function fetchNaverSummaries() {
+    const rawData = await fetchNaverRawData();
+    return applyHybridLLMSummaries(rawData, 'Naver');
 }
 
 /**
@@ -787,9 +787,15 @@ async function main() {
             cleanupNaver()
         ]);
 
-        console.log('[Step 2] 메일 요약 데이터 추출 중 (Ollama qwen2.5:3b)...');
-        const gmailData = await fetchGmailSummaries(auth);
-        const naverData = await fetchNaverSummaries();
+        console.log('[Step 2] 메일 원문 수집 중 (Gmail API + Naver IMAP 병렬)...');
+        const [gmailRaw, naverRaw] = await Promise.all([
+            fetchGmailRawData(auth),
+            fetchNaverRawData()
+        ]);
+
+        console.log('[Step 2.5] LLM 요약 중 (Ollama qwen2.5:3b, 순차 처리)...');
+        const gmailData = await applyHybridLLMSummaries(gmailRaw, 'Gmail');
+        const naverData = await applyHybridLLMSummaries(naverRaw, 'Naver');
 
         console.log('[Step 3] 구글 독스 기록 중...');
         await appendToDocs(auth, docId, gmailData, naverData, { gmail: gmailCleanup, naver: naverCleanup });
@@ -807,6 +813,9 @@ if (require.main === module) {
 module.exports = {
     fetchGmailSummaries,
     fetchNaverSummaries,
+    fetchGmailRawData,
+    fetchNaverRawData,
+    applyHybridLLMSummaries,
     appendToDocs,
     clearDocContents,
     cleanupOldReports
