@@ -211,7 +211,7 @@ async function summarizeChunkWithLLM(texts) {
         for (let attempt = 0; attempt <= MAX_RETRIES; attempt++) {
             try {
                 const controller = new AbortController();
-                const timeout = setTimeout(() => controller.abort(), 120000); // 120초 타임아웃 (N150 CPU 한계 고려)
+                const timeout = setTimeout(() => controller.abort(), 180000); // 180초 타임아웃 (N150 CPU 한계 고려 여유 확보)
 
                 const response = await fetch(ollamaUrl, {
                     method: 'POST',
@@ -222,6 +222,10 @@ async function summarizeChunkWithLLM(texts) {
                             { role: 'system', content: systemPrompt },
                             { role: 'user', content: userPrompt }
                         ],
+                        options: {
+                            num_ctx: 2048,  // N150 RAM/VRAM 절약 및 연산 속도 대폭 향상
+                            num_thread: 4   // N150의 4코어 100% 활용 지정
+                        },
                         temperature: 0.3,
                         stream: false
                     }),
