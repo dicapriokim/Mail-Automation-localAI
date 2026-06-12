@@ -134,8 +134,10 @@ function preprocessText(text) {
         processed = parts.sort((a, b) => b.length - a.length)[0] || processed;
     }
 
-    // 5. HTML 및 공백 정규화
+    // 5. HTML 및 공백 정규화 (style, script 완전 제거)
     return processed
+        .replace(/<style[^>]*>[\s\S]*?<\/style>/gi, '')
+        .replace(/<script[^>]*>[\s\S]*?<\/script>/gi, '')
         .replace(/<[^>]*>/g, ' ')
         .replace(/\r?\n|\r/g, ' ')
         .replace(/\s+/g, ' ')
@@ -177,26 +179,29 @@ async function summarizeChunkWithLLM(texts) {
         const cleanTexts = texts.map(t => preprocessText(t));
         const ollamaUrl = await getResolvedOllamaUrl();
 
-        const prompt = `다음은 ${texts.length}개의 이메일 본문 배열이다. 각 메일의 핵심을 1~2문장으로 요약하여 동일한 순서의 JSON 객체 배열로 반환하라.
+        const systemPrompt = `당신은 전문 이메일 분석가이다. 다음 규칙을 '절대적'으로 엄수하라.
         
         [반드시 지켜야 할 분류 지침]
-        1. '보안 경고', '비정상 로그인', '결제 알림', '2차 인증' 등은 priority: '긴급', action: '필요'로 분류하라.
-        2. '광고', '이벤트', '세미나', '뉴스레터'는 아무리 '마감 임박' 등의 문구가 있어도 priority: '낮음', action: '무시/선택'으로 분류하고 isAd: true를 설정하라.
-        3. 단순 공지사항이나 주간 보고 등은 priority: '보통', action: '참고'로 분류하라.
+        1. 무조건 '한국어(Korean)'로 번역하여 요약하라. 본문이 중국어, 영어나 다른 언어라도 요약은 반드시 한국어로만 작성해야 한다.
+        2. 메일 본문이 너무 짧거나 알 수 없는 코드여도 절대 생략하지 말고, 파악할 수 있는 가장 근접한 내용으로 무조건 요약하라. (빈 배열 반환 금지)
+        3. '보안 경고', '비정상 로그인', '결제 알림', '2차 인증' 등은 priority: '긴급', action: '필요'로 분류하라.
+        4. '광고', '이벤트', '세미나', '뉴스레터'는 아무리 '마감 임박' 등의 문구가 있어도 priority: '낮음', action: '무시/선택'으로 분류하고 isAd: true를 설정하라.
+        5. 단순 공지사항이나 주간 보고 등은 priority: '보통', action: '참고'로 분류하라.
 
         [출력 JSON 스키마]
         [
           {
-            "summary": "1~2문장 요약 내용",
+            "summary": "한국어 1~2문장 요약 내용",
             "action": "필요 | 참고 | 불필요",
             "priority": "긴급 | 보통 | 낮음",
             "isAd": true/false
-          },
-          ...
+          }
         ]
+        
+        반드시 마크다운 코드 블록 없이 순수한 JSON 배열만 반환하라.`;
 
-        반드시 마크다운 코드 블록 없이 순수한 JSON 배열만 반환하라.
-
+        const userPrompt = `다음은 ${texts.length}개의 이메일 본문 배열이다. 위 지침에 따라 동일한 순서의 JSON 객체 배열로 반환하라.
+        
         본문 데이터:
         ${JSON.stringify(cleanTexts)}`;
 
@@ -214,7 +219,8 @@ async function summarizeChunkWithLLM(texts) {
                     body: JSON.stringify({
                         model: process.env.OLLAMA_MODEL || 'llama3.2:1b',
                         messages: [
-                            { role: 'user', content: prompt }
+                            { role: 'system', content: systemPrompt },
+                            { role: 'user', content: userPrompt }
                         ],
                         temperature: 0.3,
                         stream: false
@@ -356,7 +362,7 @@ async function applyHybridLLMSummaries(rawData, channelName) {
                 date: new Date(item.date).toLocaleDateString('ko-KR'),
                 sender: item.from.split('<')[0].replace(/"/g, '').trim(),
                 subject: item.subject,
-                summary: result.summary,
+                summary: (result.summary || '').replace(/\r?\n|\r/g, ' ').trim(),
                 action: result.action,
                 priority: result.priority,
                 isAd: result.isAd
