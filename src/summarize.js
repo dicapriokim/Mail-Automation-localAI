@@ -142,14 +142,14 @@ function preprocessText(text) {
         .replace(/\r?\n|\r/g, ' ')
         .replace(/\s+/g, ' ')
         .trim()
-        .substring(0, 1200); // 배치 처리를 위해 길이를 약간 축소 (토큰 제한 방어)
+        .substring(0, 600); // 처리 속도 극한 최적화를 위해 토큰 허용량 반토막 (1200 -> 600)
 }
 
 /**
- * [Task 1] Shift-Left 필터링: LLM 호출 전 광고성 메일 차단
+ * [Task 1] Shift-Left 필터링: LLM 호출 전 광고성/단순알림 메일 차단 (시간 단축 핵심)
  */
 function isStaticBypass(subject) {
-    const bypassKeywords = ["[광고]", "(광고)", "Newsletter", "뉴스레터", "알림", "Survey", "수신동의", "세미나", "초대"];
+    const bypassKeywords = ["[광고]", "(광고)", "Newsletter", "뉴스레터", "알림", "Survey", "수신동의", "세미나", "초대", "주문", "결제", "배송", "출고", "승인", "영수증", "환영"];
     return bypassKeywords.some(keyword => subject.includes(keyword));
 }
 
@@ -223,7 +223,7 @@ async function summarizeChunkWithLLM(texts) {
                             { role: 'user', content: userPrompt }
                         ],
                         options: {
-                            num_ctx: 2048,  // N150 RAM/VRAM 절약 및 연산 속도 대폭 향상
+                            num_ctx: 1024,  // N150 연산 시간 최소화를 위해 2048에서 1024로 극한 축소
                             num_thread: 4   // N150의 4코어 100% 활용 지정
                         },
                         temperature: 0.3,

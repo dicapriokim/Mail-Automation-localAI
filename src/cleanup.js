@@ -11,10 +11,11 @@ async function cleanupGmail(auth) {
 
     // 1. 규칙 정의 (ad_deletion_rules.md 기준)
     const ruleConfigs = [
-        { q: 'newer_than:1d from:AliExpress subject:(광고)', label: 'AliExpress 광고 프로모션' },
-        { q: 'newer_than:1d from:Netflix ("잊지 말고 끝까지 시청하세요" OR "이 장면을 기억하시나요" OR "취향 저격 콘텐츠")', label: 'Netflix 시청 독려 알림' },
-        { q: 'newer_than:1d category:promotions ("설문조사" OR "의견을 들려주세요" OR "Survey")', label: '마케팅 설문조사' },
-        { q: 'newer_than:1d (성인 OR 도박 OR 카지노 OR 대출 OR 토토) -{from:netflix from:disney from:samsung from:booking from:agoda from:trip from:microsoft from:toss from:google from:kakao from:naver}', label: '스팸 및 불법 광고' }
+        { q: 'newer_than:30d subject:(광고)', label: '범용 한국어 광고' },
+        { q: 'newer_than:30d from:AliExpress subject:(광고)', label: 'AliExpress 광고 프로모션' },
+        { q: 'newer_than:30d from:Netflix ("잊지 말고 끝까지 시청하세요" OR "이 장면을 기억하시나요" OR "취향 저격 콘텐츠")', label: 'Netflix 시청 독려 알림' },
+        { q: 'newer_than:30d category:promotions ("설문조사" OR "의견을 들려주세요" OR "Survey")', label: '마케팅 설문조사' },
+        { q: 'newer_than:30d (성인 OR 도박 OR 카지노 OR 대출 OR 토토) -{from:netflix from:disney from:samsung from:booking from:agoda from:trip from:microsoft from:toss from:google from:kakao from:naver}', label: '스팸 및 불법 광고' }
     ];
 
     let totalDeleted = 0;

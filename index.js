@@ -18,9 +18,11 @@ async function sendTelegramNotification(minutes, seconds, totalMails, docId) {
         }
 
         // 메시지 구성 (Markdown)
+        const usedModel = process.env.OLLAMA_MODEL || 'llama3.2:1b';
         let message = `✅ *[메일 요약 완료]*\n\n` +
             `• 처리 건수: ${totalMails}건\n` +
-            `• 소요 시간: ${minutes}분 ${seconds}초\n\n`;
+            `• 소요 시간: ${minutes}분 ${seconds}초\n` +
+            `• 사용 모델: \`${usedModel}\`\n\n`;
 
         if (docId) {
             const docsUrl = `https://docs.google.com/document/d/${docId}/edit`;
@@ -99,9 +101,10 @@ async function main() {
         const elapsed = endTime - startTime;
         const minutes = Math.floor(elapsed / 60000);
         const seconds = Math.floor((elapsed % 60000) / 1000);
-
+        const usedModel = process.env.OLLAMA_MODEL || 'llama3.2:1b';
         console.log(`\n[Performance] 총 소요 시간: ${minutes}분 ${seconds}초`);
         console.log(`[Performance] 처리 건수: ${totalProcessed}건`);
+        console.log(`[Performance] 사용 모델: ${usedModel}`);
 
         // 텔레그램 알림 전송 (구글 독스 링크 포함)
         await sendTelegramNotification(minutes, seconds, totalProcessed, docId);
