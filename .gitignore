@@ -20,3 +20,5 @@ Thumbs.db
 *_bak
 *.bak
 *output.txt
+*.zip
+필수파일.zip
