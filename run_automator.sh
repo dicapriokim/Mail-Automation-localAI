@@ -1,6 +1,9 @@
 #!/bin/bash
 
 # --- [안티 그래비티 에이전트 메인 실행 스크립트] ---
+# 한글 깨짐 방지: UTF-8 로케일 적용
+export LANG=ko_KR.UTF-8
+export LC_ALL=ko_KR.UTF-8
 
 # 1. 프로젝트 폴더로 이동 (경로가 다를 경우 수정 필요)
 cd /opt/Mail-Automator || exit
