@@ -46,9 +46,9 @@ LXC 환경에서 처음 구축을 시작하는 분들은 헤매지 마시고 가
 Proxmox LXC 템플릿 생성부터 GPU 패스스루 설정, Ollama 엔진 설치 및 가속 최적화까지 모든 과정이 A to Z로 담겨 있습니다.  
 👉 [🖥️ SuperLLM LXC 신규 구축 가이드 문서 열기](https://github.com/dicapriokim/LocalAI-ollama-openai)
 
-> 💡 **LXC 구성 팁 (단일 vs 분리 운영)**
-> * **분리 운영 (권장)**: AI 백엔드(Ollama)와 본 서비스(Mail-Automator)를 서로 다른 LXC로 구동하면 AI 연산 시 발생하는 자원 점유율(CPU/VRAM) 스파이크로부터 메일 서비스를 안전하게 격리할 수 있습니다.
-> * **통합 운영 (대안)**: 하드웨어 자원이 제한적인 경우 하나의 LXC에 통합하여 구동해도 무방합니다. 이 경우 네트워크 탐색 없이 `127.0.0.1:11434` (localhost)로 빠르고 단순하게 통신할 수 있으나, 컨테이너에 충분한 리소스(RAM 등) 할당이 필요합니다.
+> 💡 **실행 환경 구성 팁 (단일 vs 분리 운영)**
+> * **분리 운영 (권장)**: AI 백엔드(Ollama)와 본 서비스(Mail-Automator)를 서로 다른 LXC(또는 서버)로 구동하면 AI 연산 시 발생하는 자원 점유율(CPU/VRAM) 스파이크로부터 메일 서비스를 안전하게 격리할 수 있습니다.
+> * **통합 운영 (대안)**: 하드웨어 자원이 제한적인 경우 하나의 LXC에 통합하여 구동해도 무방합니다. 이 경우 네트워크 탐색 없이 `127.0.0.1:11434` (localhost)로 빠르고 단순하게 통신할 수 있으나, LXC/서버에 충분한 리소스(RAM 등) 할당이 필요합니다.
 
 - **Node.js 설치 (v18+)**
   * *LXC/Ubuntu 서버 환경의 경우*:
@@ -104,7 +104,7 @@ Proxmox LXC 템플릿 생성부터 GPU 패스스루 설정, Ollama 엔진 설치
 ```bash
 git clone https://github.com/dicapriokim/Mail-Automation-localAI.git Mail-Automator
 cd Mail-Automator
-npm install
+npm install --omit=dev
 ```
 
 ### 3. 환경 설정 (`.env`)
@@ -122,7 +122,7 @@ TELEGRAM_CHAT_ID=your_chat_id
 # [선택] 로컬 AI 서버 (Ollama) - 미설정 시 mDNS/서브넷 스캔으로 자동 탐색
 LOCAL_AI_IP=192.168.0.100
 ```
-*GCP 콘솔에서 발급받은 `credentials.json`과 최초 인증으로 생성되는 `token.json`도 동일한 프로젝트 루트 경로에 위치해야 합니다. (서버/LXC 환경의 경우 로컬에서 생성한 파일들을 해당 경로로 복사하여 사용 가능)*
+*GCP 콘솔에서 발급받은 `credentials.json`과 최초 인증으로 생성되는 `token.json`도 동일한 프로젝트 루트 경로에 위치해야 합니다. (노트북 등 로컬 PC에서 최초 구글 인증을 마쳐 생성된 `token.json` 파일을 서버의 프로젝트 폴더로 그대로 복사하여 사용할 수 있습니다.)*
 
 ### 4. 실행 및 자동화 (Execution & Automation)
 
@@ -132,13 +132,24 @@ node index.js
 ```
 
 #### 2) LXC/서버 환경 크론탭(Crontab) 자동화
-매일 정해진 시간(예: 매일 오전 9시 정각)에 메일 비서가 자동으로 메일을 수집하고 보고서를 작성하도록 시스템 크론을 구성합니다.
+매일 정해진 시간(예: 매일 오전 9시 정각)에 메일 비서가 자동으로 메일을 수집하고 보고서를 작성하도록 시스템 크론을 구성합니다. 
+
+우선 자동화 스크립트의 실행을 보장하고 윈도우 편집으로 인한 오염을 방지하기 위해 실행 권한 부여 및 줄바꿈 형식 변환 작업을 거쳐야 합니다:
+```bash
+# 1. 실행 권한 부여
+chmod +x /opt/Mail-Automator/run_automator.sh
+
+# 2. [필수] 윈도우 줄바꿈 문자(\r) 리눅스 형식으로 제거
+sed -i -e 's/\r$//' /opt/Mail-Automator/run_automator.sh
+```
+
+그 후 크론 스케줄 설정을 엽니다.
 ```bash
 crontab -e
 ```
-설정 최하단에 아래 실행 행을 추가하고 저장합니다 (Node.js 실행 절대경로 및 프로젝트 경로를 자신의 환경에 맞게 지정):
+설정 최하단에 아래 실행 행을 추가하고 저장합니다 (경로는 프로젝트 설치 경로에 맞춰 지정):
 ```cron
-00 09 * * * cd /opt/Mail-Automator && /usr/bin/node index.js >> /opt/Mail-Automator/cron.log 2>&1
+00 09 * * * /opt/Mail-Automator/run_automator.sh >> /opt/Mail-Automator/cron.log 2>&1
 ```
 
 ---
