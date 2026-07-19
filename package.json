@@ -1,6 +1,6 @@
 {
   "name": "mail-automator-api",
-  "version": "1.0.0",
+  "version": "1.0.3",
   "description": "API-based Mail Automation Engine",
   "main": "index.js",
   "scripts": {
