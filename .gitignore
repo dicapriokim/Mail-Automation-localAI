@@ -1,5 +1,5 @@
 # Environment and Credentials
-.env
+.env*
 credentials.json
 token.json
 

@@ -7,95 +7,9 @@ const { simpleParser } = require('mailparser');
 const net = require('net');
 require('dotenv').config();
 
-// ============================================================
-// Ollama 동적 IP 탐색 및 캐싱 모듈 (SuperLLM LXC 자동 감지)
-// ============================================================
-let resolvedOllamaUrl = null;
+const { AIFactory } = require('./aiProvider');
 
-/**
- * TCP 소켓으로 대상 호스트:포트의 연결 가능 여부를 비동기 테스트합니다.
- * @param {string} host - 대상 호스트 IP 또는 도메인
- * @param {number} port - 대상 포트
- * @param {number} timeout - 연결 타임아웃(ms)
- * @returns {Promise<boolean>} 연결 성공 여부
- */
-function testTcpConnection(host, port, timeout = 800) {
-    return new Promise((resolve) => {
-        const socket = new net.Socket();
-        let status = false;
-        socket.setTimeout(timeout);
-        socket.connect(port, host, () => {
-            status = true;
-            socket.destroy();
-        });
-        socket.on('timeout', () => { socket.destroy(); });
-        socket.on('error', () => { socket.destroy(); });
-        socket.on('close', () => { resolve(status); });
-    });
-}
-
-/**
- * 192.168.0.x 서브넷 대역을 순회하며 11434 포트가 열린 Ollama 서버를 탐색합니다.
- * @returns {Promise<string|null>} 발견된 IP 주소 또는 null
- */
-async function scanSubnetForOllama() {
-    const promises = [];
-    for (let i = 1; i < 255; i++) {
-        const ip = `192.168.0.${i}`;
-        promises.push(
-            testTcpConnection(ip, 11434, 400).then(isOpen => isOpen ? ip : null)
-        );
-    }
-    const results = await Promise.all(promises);
-    return results.find(ip => ip !== null) || null;
-}
-
-/**
- * Ollama API URL을 동적으로 확정합니다.
- * 우선순위: 1) .env LOCAL_AI_IP → 2) superllm.local:11434 → 3) 서브넷 스캔
- * 최초 1회만 스캔하며, 이후 캐싱된 URL을 즉시 반환합니다.
- * 통신 실패 시 resolvedOllamaUrl = null 로 초기화되어 다음 호출에서 재탐색합니다.
- * @returns {Promise<string>} Ollama chat completions API의 전체 URL
- */
-async function getResolvedOllamaUrl() {
-    if (resolvedOllamaUrl) return resolvedOllamaUrl;
-
-    // 1순위: .env에 명시된 고정 IP
-    const envIp = process.env.LOCAL_AI_IP;
-    if (envIp) {
-        let host = envIp;
-        let port = 11434;
-        if (envIp.includes(':')) {
-            const parts = envIp.split(':');
-            host = parts[0];
-            port = parseInt(parts[1], 10);
-        }
-        if (await testTcpConnection(host, port, 400)) {
-            resolvedOllamaUrl = `http://${host}:${port}/v1/chat/completions`;
-            console.log(`[Ollama Discovery] .env 설정 IP 연결 성공: ${resolvedOllamaUrl}`);
-            return resolvedOllamaUrl;
-        }
-    }
-
-    // 2순위: mDNS 호스트명 (avahi-daemon)
-    if (await testTcpConnection('superllm.local', 11434, 400)) {
-        resolvedOllamaUrl = `http://superllm.local:11434/v1/chat/completions`;
-        console.log(`[Ollama Discovery] superllm.local:11434 연결 성공`);
-        return resolvedOllamaUrl;
-    }
-
-    // 3순위: 서브넷 대역 자동 스캔
-    const discoveredIp = await scanSubnetForOllama();
-    if (discoveredIp) {
-        resolvedOllamaUrl = `http://${discoveredIp}:11434/v1/chat/completions`;
-        console.log(`[Ollama Discovery] 서브넷 스캔으로 발견: ${resolvedOllamaUrl}`);
-        return resolvedOllamaUrl;
-    }
-
-    // 모두 실패 시 localhost 폴백
-    console.warn(`[Ollama Discovery] 자동 탐색 실패. localhost:11434 폴백 적용.`);
-    return `http://127.0.0.1:11434/v1/chat/completions`;
-}
+// (이전의 Ollama 동적 IP 탐색 및 캐싱 모듈은 /src/aiProvider.js 로 정상 이관되었습니다.)
 
 /**
  * 본문 정규화 고도화: MIME 디코딩, 멀티파트 브레이킹, HTML 제거
@@ -127,10 +41,8 @@ function preprocessText(text) {
     }
 
     // 3. MIME 멀티파트 구조 강제 분해 및 핵심 텍스트 추출
-    // Content-Type이 여러 번 등장하는 경우 가장 아래쪽의 텍스트 영역을 찾음
     if (processed.includes('Content-Type:')) {
         const parts = processed.split(/Content-Type:.*?\n/gi);
-        // 가장 큰 텍스트 덩어리나 마지막 덩어리를 선택
         processed = parts.sort((a, b) => b.length - a.length)[0] || processed;
     }
 
@@ -159,14 +71,27 @@ function isStaticBypass(subject) {
 async function summarizeBatchWithLLM(texts) {
     if (!texts || texts.length === 0) return [];
 
-    const CHUNK_SIZE = 1; // CPU 연산 한계 및 3b 모델 환각(Hallucination) 방지를 위해 1건 단위 처리
+    const provider = (process.env.AI_PROVIDER || 'OLLAMA').toUpperCase();
+    
+    // AI 공급자에 따른 동적 배치 정책 수립
+    // 1. OLLAMA(로컬): 1건씩 안전하게 순차 처리
+    // 2. GEMINI/CHATGPT(클라우드): 한 번에 묶어서 보내어 429 차단 및 속도 10배 단축
+    const isLocal = provider === 'OLLAMA';
+    const CHUNK_SIZE = isLocal ? 1 : 20; 
+    const DELAY_MS = isLocal ? 0 : 0; // 클라우드는 1회 호출로 끝나므로 딜레이 불필요
+
     const results = [];
 
     for (let i = 0; i < texts.length; i += CHUNK_SIZE) {
         const chunk = texts.slice(i, i + CHUNK_SIZE);
-        console.log(`[Ollama Batch] ${texts.length}건 중 ${i + 1}~${Math.min(i + CHUNK_SIZE, texts.length)}번째 메일 요약 처리 중...`);
+        console.log(`[AI Batch] 공급자: ${provider} | ${texts.length}건 중 ${i + 1}~${Math.min(i + CHUNK_SIZE, texts.length)}번째 메일 요약 처리 중...`);
         const chunkSummaries = await summarizeChunkWithLLM(chunk);
         results.push(...chunkSummaries);
+
+        // 로컬 Ollama의 경우 소켓 부하 경감을 위해 필요 시 지연 (클라우드인 경우 단 1회 전송으로 루프가 조기 종료됨)
+        if (isLocal && i + CHUNK_SIZE < texts.length) {
+            await new Promise(resolve => setTimeout(resolve, 800));
+        }
     }
     
     return results;
@@ -177,7 +102,7 @@ async function summarizeChunkWithLLM(texts) {
 
     try {
         const cleanTexts = texts.map(t => preprocessText(t));
-        const ollamaUrl = await getResolvedOllamaUrl();
+        const providerInstance = AIFactory.getProvider();
 
         const systemPrompt = `당신은 전문 이메일 분석가이다. 다음 규칙을 '절대적'으로 엄수하라.
         
@@ -205,42 +130,12 @@ async function summarizeChunkWithLLM(texts) {
         본문 데이터:
         ${JSON.stringify(cleanTexts)}`;
 
-        const MAX_RETRIES = 1; // JSON 파싱 실패 또는 일시적 타임아웃 시 1회 재시도 허용
+        const MAX_RETRIES = 1;
         let delayMs = 3000;
 
         for (let attempt = 0; attempt <= MAX_RETRIES; attempt++) {
             try {
-                const controller = new AbortController();
-                const timeout = setTimeout(() => controller.abort(), 180000); // 180초 타임아웃 (N150 CPU 한계 고려 여유 확보)
-
-                const response = await fetch(ollamaUrl, {
-                    method: 'POST',
-                    headers: { 'Content-Type': 'application/json' },
-                    body: JSON.stringify({
-                        model: process.env.OLLAMA_MODEL || 'llama3.2:1b',
-                        messages: [
-                            { role: 'system', content: systemPrompt },
-                            { role: 'user', content: userPrompt }
-                        ],
-                        options: {
-                            num_ctx: 1024,  // N150 연산 시간 최소화를 위해 2048에서 1024로 극한 축소
-                            num_thread: 4   // N150의 4코어 100% 활용 지정
-                        },
-                        temperature: 0.3,
-                        stream: false
-                    }),
-                    signal: controller.signal
-                });
-
-                clearTimeout(timeout);
-
-                if (!response.ok) {
-                    const errorText = await response.text();
-                    throw new Error(`Ollama API 응답 오류 (${response.status}): ${errorText}`);
-                }
-
-                const data = await response.json();
-                const responseText = (data.choices?.[0]?.message?.content || '').trim();
+                const responseText = await providerInstance.chatComplete(systemPrompt, userPrompt);
 
                 // JSON 추출 정규화 로직 (코드 블록 제거 및 방어)
                 let cleanJsonString = responseText
@@ -262,7 +157,7 @@ async function summarizeChunkWithLLM(texts) {
 
                 // 빈 배열이 반환되거나 길이가 안 맞을 경우 에러 발생
                 if (Array.isArray(summaries) && summaries.length === texts.length) {
-                    console.log(`[Ollama Batch] ${texts.length}건 중 요약 성공 (${process.env.OLLAMA_MODEL || 'llama3.2:1b'}, API 1회 소모)`);
+                    console.log(`[AI Batch] ${texts.length}건 중 요약 성공 (API 소모 완료)`);
                     return summaries;
                 }
                 throw new Error(`JSON 배열 파싱 실패 또는 길이 불일치 (기대: ${texts.length}, 수신: ${summaries ? summaries.length : 0})`);
@@ -273,13 +168,11 @@ async function summarizeChunkWithLLM(texts) {
                     apiErr.message.includes('ECONNRESET') ||
                     apiErr.message.includes('503') ||
                     apiErr.message.includes('JSON 배열 파싱 실패') ||
-                    apiErr instanceof SyntaxError; // JSON.parse 에러도 재시도 포함
+                    apiErr instanceof SyntaxError;
 
-                console.log(`[Ollama Batch Attempt ${attempt + 1}] Error: ${isTimeout ? 'Timeout (120s)' : apiErr.message}`);
+                console.log(`[AI Batch Attempt ${attempt + 1}] Error: ${apiErr.message}`);
 
                 if (isTransient && attempt < MAX_RETRIES) {
-                    // 일시적인 API 통신 타임아웃 발생 시에도 탐색 성공한 IP 캐시는 유지하여 불필요한 재탐색으로 인한 localhost 폴백 방지
-                    // resolvedOllamaUrl = null;
                     console.log(`${delayMs / 1000}초 대기 후 재시도합니다... (Transient Error 대응)`);
                     await new Promise(resolve => setTimeout(resolve, delayMs));
                     delayMs *= 2;
@@ -289,9 +182,7 @@ async function summarizeChunkWithLLM(texts) {
             }
         }
     } catch (err) {
-        // 최종 실패 시에도 IP 캐시를 보존하여 다음 메일 처리 시 즉시 통신 시도하도록 유지
-        // resolvedOllamaUrl = null;
-        console.error(`[Ollama Batch Final Error] ${err.message}`);
+        console.error(`[AI Batch Final Error] ${err.message}`);
         return texts.map(() => null); // 전원 Safe Fallback 유도
     }
 }
