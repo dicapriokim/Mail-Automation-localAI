@@ -13,6 +13,9 @@ __pycache__/
 *.log
 error.log
 .agent/
+.agents/
+scratch/
+analyze_mail_length.js
 .DS_Store
 Thumbs.db
 

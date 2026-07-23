@@ -46,7 +46,7 @@ OLLAMA_MODEL="qwen2.5:3b"
 
 # Google Gemini 설정
 GEMINI_API_KEY=""
-GEMINI_MODEL="gemini-3.5-flash"
+GEMINI_MODEL="gemini-3.6-flash"
 
 # OpenAI ChatGPT 설정
 OPENAI_API_KEY=""
@@ -403,7 +403,7 @@ async function startCLI() {
         OLLAMA_MODEL: config.OLLAMA_MODEL || 'qwen2.5:3b',
         LOCAL_AI_IP: config.LOCAL_AI_IP || '',
         GEMINI_API_KEY: config.GEMINI_API_KEY || '',
-        GEMINI_MODEL: config.GEMINI_MODEL || 'gemini-3.5-flash',
+        GEMINI_MODEL: config.GEMINI_MODEL || 'gemini-3.6-flash',
         OPENAI_API_KEY: config.OPENAI_API_KEY || '',
         OPENAI_MODEL: config.OPENAI_MODEL || 'gpt-4o-mini',
         NOTIFY_CHANNEL: config.NOTIFY_CHANNEL || 'TELEGRAM',

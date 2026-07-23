@@ -141,7 +141,7 @@ class OllamaProvider {
     async chatComplete(systemPrompt, userPrompt) {
         return executeWithRetry(async () => {
             const ollamaUrl = await getResolvedOllamaUrl();
-            const model = process.env.OLLAMA_MODEL || 'qwen2.5:3b';
+            const model = process.env.OLLAMA_MODEL ? process.env.OLLAMA_MODEL.trim() : 'qwen2.5:3b';
             
             const response = await fetch(ollamaUrl, {
                 method: 'POST',
@@ -171,8 +171,8 @@ class OllamaProvider {
 class GeminiProvider {
     async chatComplete(systemPrompt, userPrompt) {
         return executeWithRetry(async () => {
-            const apiKey = process.env.GEMINI_API_KEY;
-            const model = process.env.GEMINI_MODEL || 'gemini-3.5-flash';
+            const apiKey = process.env.GEMINI_API_KEY ? process.env.GEMINI_API_KEY.trim() : undefined;
+            const model = process.env.GEMINI_MODEL ? process.env.GEMINI_MODEL.trim() : 'gemini-3.6-flash';
             if (!apiKey) throw new Error('GEMINI_API_KEY가 설정되어 있지 않습니다. .env를 확인해 주세요.');
             
             // Node 런타임 프로토타입/글로벌 변조 영역을 탈출하기 위해 시스템 curl 쉘 세션 호출로 격리합니다.
@@ -224,8 +224,8 @@ class GeminiProvider {
 class ChatGPTProvider {
     async chatComplete(systemPrompt, userPrompt) {
         return executeWithRetry(async () => {
-            const apiKey = process.env.OPENAI_API_KEY;
-            const model = process.env.OPENAI_MODEL || 'gpt-4o-mini';
+            const apiKey = process.env.OPENAI_API_KEY ? process.env.OPENAI_API_KEY.trim() : undefined;
+            const model = process.env.OPENAI_MODEL ? process.env.OPENAI_MODEL.trim() : 'gpt-4o-mini';
             if (!apiKey) throw new Error('OPENAI_API_KEY가 설정되어 있지 않습니다.');
             
             const url = 'https://api.openai.com/v1/chat/completions';
@@ -264,7 +264,7 @@ class ChatGPTProvider {
 // ==========================================
 class AIFactory {
     static getProvider() {
-        const providerName = (process.env.AI_PROVIDER || 'OLLAMA').toUpperCase();
+        const providerName = (process.env.AI_PROVIDER || 'OLLAMA').trim().toUpperCase();
         console.log(`[진행 내용] 팩토리 엔진 - 현재 지정된 AI 공급자: ${providerName}`);
         
         switch (providerName) {

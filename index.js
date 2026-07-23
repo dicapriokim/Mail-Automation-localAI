@@ -54,7 +54,7 @@ async function main() {
         const seconds = Math.floor((elapsed % 60000) / 1000);
         const provider = process.env.AI_PROVIDER || 'OLLAMA';
         const model = provider === 'OLLAMA' ? (process.env.OLLAMA_MODEL || 'qwen2.5:3b') 
-                    : provider === 'GEMINI' ? (process.env.GEMINI_MODEL || 'gemini-3.5-flash') 
+                    : provider === 'GEMINI' ? (process.env.GEMINI_MODEL || 'gemini-3.6-flash') 
                     : (process.env.OPENAI_MODEL || 'gpt-4o-mini');
         const tokenUsage = AIFactory.getTokenUsage();
         

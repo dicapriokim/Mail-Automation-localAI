@@ -63,7 +63,9 @@ async function cleanupNaver() {
         const connection = await imaps.connect(config);
         await connection.openBox('INBOX');
 
-        const searchCriteria = ['UNSEEN', ['SUBJECT', '(광고)']];
+        const today = new Date();
+        today.setDate(today.getDate() - 3); // 최근 3일 치 검색 (읽음 여부 상관없이)
+        const searchCriteria = [['SINCE', today], ['SUBJECT', '(광고)']];
         const fetchOptions = { bodies: ['HEADER.FIELDS (SUBJECT)'], struct: true };
 
         const messages = await connection.search(searchCriteria, fetchOptions);
@@ -71,10 +73,18 @@ async function cleanupNaver() {
 
         if (messages.length > 0) {
             for (const item of messages) {
-                await connection.addFlags(item.attributes.uid, '\\Deleted');
+                try {
+                    try {
+                        await connection.moveMessage(item.attributes.uid, 'Trash');
+                    } catch (err) {
+                        await connection.moveMessage(item.attributes.uid, '휴지통');
+                    }
+                } catch(innerErr) {
+                    await connection.addFlags(item.attributes.uid, '\\Deleted');
+                }
                 deletedCount++;
             }
-            await connection.imap.expunge();
+            // connection.imap.expunge(); // 휴지통 보존을 위해 생략
         }
 
         connection.end();
