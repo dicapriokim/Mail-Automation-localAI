@@ -6,7 +6,8 @@ const { google } = require('googleapis');
 const SCOPES = [
   'https://www.googleapis.com/auth/gmail.modify',
   'https://www.googleapis.com/auth/documents',
-  'https://www.googleapis.com/auth/drive.file'
+  'https://www.googleapis.com/auth/drive.file',
+  'https://www.googleapis.com/auth/drive'
 ];
 
 const TOKEN_PATH = path.join(process.cwd(), 'token.json');

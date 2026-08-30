@@ -2,6 +2,7 @@
 .env*
 credentials.json
 token.json
+token*.json
 
 # Dependencies and Virtual Environments
 node_modules/

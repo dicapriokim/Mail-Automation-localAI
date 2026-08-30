@@ -1,6 +1,6 @@
 const { google } = require('googleapis');
 const { authorize } = require('./auth');
-const { findDocId } = require('./findDoc');
+const { findDocId, ensureDocPermissions } = require('./findDoc');
 const { cleanupGmail, cleanupNaver } = require('./cleanup');
 const imaps = require('imap-simple');
 const { simpleParser } = require('mailparser');
@@ -938,8 +938,10 @@ async function main() {
         let docId = process.env.GOOGLE_DOC_ID;
 
         if (!docId) {
-            console.log('[Info] .env에 GOOGLE_DOC_ID가 없어 검색을 시작합니다...');
+            console.log('[Info] .env에 GOOGLE_DOC_ID가 없어 검색 또는 자동 생성을 진행합니다...');
             docId = await findDocId(auth);
+        } else {
+            await ensureDocPermissions(auth, docId);
         }
 
         if (!docId) {

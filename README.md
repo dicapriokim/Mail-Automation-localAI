@@ -54,6 +54,32 @@ node setup.js
 node index.js
 ```
 
+### 3. 📑 구글 문서 생성 및 계정 인증/토큰 갱신 (4단계 가이드)
+
+새로운 구글 문서로 교체하거나 사용할 구글 계정을 변경하여 토큰을 재발급받을 때 아래 4단계를 진행합니다:
+
+1. **1단계. 사용할 구글 계정으로 새 구글 문서 생성**
+   - [Google Docs](https://docs.google.com)에 접속하여 새 문서를 생성합니다.
+   - 브라우저 주소창 URL에서 문서 ID를 복사하여 `.env` 파일의 `GOOGLE_DOC_ID="문서ID"` 항목에 등록합니다.
+     *(예: `https://docs.google.com/document/d/{GOOGLE_DOC_ID}/edit`)*
+2. **2단계. 구글 계정 재인증 및 `token.json` 갱신**
+   - 기존 토큰 삭제 후 인증 스크립트를 실행합니다:
+     ```bash
+     # 기존 토큰 삭제 (Windows: Remove-Item token.json / Linux: rm token.json)
+     node src/auth.js
+     ```
+   - 터미널에 표시되는 URL로 브라우저에 접속하여 사용할 구글 계정으로 권한을 허용한 뒤, 발급된 인증 코드를 터미널에 입력하여 새 `token.json`을 생성합니다.
+3. **3단계. 서버(LXC)에 새 설정 및 토큰 배포**
+   - 갱신된 설정 파일과 토큰을 운영 서버로 전송합니다:
+     ```bash
+     scp token.json .env root@<서버IP>:/opt/Mail-Automator/
+     ```
+4. **4단계. 서버 프로세스 재시작**
+   - 서버에서 새 환경변수(`.env`)와 토큰이 적용되도록 백엔드 프로세스를 재시작합니다:
+     ```bash
+     pm2 restart all
+     ```
+
 ---
 
 ## 📄 라이선스 (License)

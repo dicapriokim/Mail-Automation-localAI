@@ -3,6 +3,7 @@ const { cleanupGmail, cleanupNaver } = require('./src/cleanup');
 const { fetchGmailSummaries, fetchNaverSummaries, appendToDocs, clearDocContents, cleanupOldReports } = require('./src/summarize');
 const { routeNotification } = require('./src/notificationRouter');
 const { AIFactory } = require('./src/aiProvider');
+const { findDocId, ensureDocPermissions } = require('./src/findDoc');
 require('dotenv').config();
 
 async function main() {
@@ -10,7 +11,7 @@ async function main() {
 
     const startTime = Date.now();
     let totalProcessed = 0;
-    const docId = process.env.GOOGLE_DOC_ID;
+    let docId = process.env.GOOGLE_DOC_ID;
 
     try {
         const auth = await authorize();
@@ -21,7 +22,15 @@ async function main() {
         const gmailDeleted = await cleanupGmail(auth);
         const naverDeleted = await cleanupNaver();
 
-        if (!docId) throw new Error("GOOGLE_DOC_ID가 설정되지 않았습니다.");
+        if (!docId) {
+            console.log('[Info] .env에 GOOGLE_DOC_ID가 없어 검색 또는 자동 생성을 진행합니다...');
+            docId = await findDocId(auth);
+        }
+
+        if (!docId) throw new Error("GOOGLE_DOC_ID를 설정하거나 구글 문서를 가져올 수 없습니다.");
+
+        // 문서 권한 최신화 (모바일 Google Docs 앱 접근 가능하도록)
+        await ensureDocPermissions(auth, docId);
 
         // 2. Document Initialization & Cleanup
         console.log('[Step 1.5] 문서 초기화 및 오래된 보고서 정리 중...');
