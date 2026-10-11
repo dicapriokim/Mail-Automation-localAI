@@ -156,8 +156,8 @@ async function routeNotification({ minutes, seconds, totalMails, docId }) {
                 : provider === 'GEMINI' ? (process.env.GEMINI_MODEL || 'gemini-1.5-flash') 
                 : (process.env.OPENAI_MODEL || 'gpt-4o-mini');
 
-    // 텔레그램용 마크다운 메시지
-    const docsUrl = docId ? `https://docs.google.com/document/d/${docId}/edit` : '';
+    // 텔레그램용 마크다운 메시지 (모바일 앱 호환을 위해 /view?usp=sharing 사용)
+    const docsUrl = docId ? `https://docs.google.com/document/d/${docId}/view?usp=sharing` : '';
     const telegramText = `✅ *[메일 요약 완료]*\n\n` +
         `• 처리 건수: ${totalMails}건\n` +
         `• 소요 시간: ${minutes}분 ${seconds}초\n` +

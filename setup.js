@@ -280,25 +280,83 @@ async function configureAIProvider(rl, state, isWizard = false) {
     if (providerSelect === '1') state.AI_PROVIDER = 'OLLAMA';
     else if (providerSelect === '2') state.AI_PROVIDER = 'GEMINI';
     else if (providerSelect === '3') state.AI_PROVIDER = 'CHATGPT';
+
+    // 공급자를 선택했으면 곧바로 해당 공급자의 모델명 입력으로 자연스럽게 연결
+    if (!isWizard && (providerSelect === '1' || providerSelect === '2' || providerSelect === '3')) {
+        await configureAIModelAndKey(rl, state, false);
+    }
 }
 
 async function configureAIModelAndKey(rl, state, isWizard = false) {
     clearConsole();
-    console.log('--- [Step 2] AI 모델 및 API Key 세부 설정 ---');
-    if (state.AI_PROVIDER === 'OLLAMA') {
+    const provider = (state.AI_PROVIDER || 'GEMINI').toUpperCase().trim();
+    console.log(`--- [Step 2] AI 모델 및 API Key 세부 설정 (공급자: ${provider}) ---`);
+    
+    if (provider === 'OLLAMA') {
         const ipInput = await askQuestion(rl, `Ollama IP주소 입력 (현재: ${state.LOCAL_AI_IP || '(비어있음 - 자동탐색)'}, 엔터 시 유지): `);
         if (ipInput.trim() !== '') state.LOCAL_AI_IP = ipInput.trim();
         
-        const modelInput = await askQuestion(rl, `Ollama 모델명 입력 (현재 기본값: ${state.OLLAMA_MODEL}): `);
-        if (modelInput.trim() !== '') state.OLLAMA_MODEL = modelInput.trim();
-    } else if (state.AI_PROVIDER === 'GEMINI') {
-        const modelInput = await askQuestion(rl, `Gemini 모델명 입력 (현재 기본값: ${state.GEMINI_MODEL}): `);
-        if (modelInput.trim() !== '') state.GEMINI_MODEL = modelInput.trim();
+        console.log('\n--- [Ollama 모델 선택] ---');
+        console.log('1. qwen2.5:3b     (⭐ 추천 기본값: 한글/성능 최적화)');
+        console.log('2. llama3.2:3b    (초경량 로컬 모델)');
+        console.log('3. gemma2:2b      (구글 초경량 모델)');
+        console.log('4. 직접 수동 입력 (Custom)');
+        console.log(`(현재 설정: ${state.OLLAMA_MODEL || 'qwen2.5:3b'}, 엔터 시 유지)`);
+        console.log('----------------------------');
+        const sel = await askQuestion(rl, '선택 (1~4 또는 엔터): ');
+        const trimmed = sel.trim();
+        if (trimmed === '1') state.OLLAMA_MODEL = 'qwen2.5:3b';
+        else if (trimmed === '2') state.OLLAMA_MODEL = 'llama3.2:3b';
+        else if (trimmed === '3') state.OLLAMA_MODEL = 'gemma2:2b';
+        else if (trimmed === '4') {
+            const custom = await askQuestion(rl, '사용할 Ollama 모델명 직접 입력: ');
+            if (custom.trim() !== '') state.OLLAMA_MODEL = custom.trim();
+        } else if (trimmed !== '' && isNaN(Number(trimmed))) {
+            state.OLLAMA_MODEL = trimmed;
+        }
+        console.log(`${GREEN}✔ 선택된 모델: ${state.OLLAMA_MODEL}${RESET}\n`);
+
+    } else if (provider === 'GEMINI') {
+        console.log('\n--- [Gemini 모델 선택] ---');
+        console.log('1. gemini-3.8-flash      (⭐ 최신 추천: 고성능/정밀 요약)');
+        console.log('2. gemini-3.6-flash      (안정화 검증 버전)');
+        console.log('3. gemini-flash-latest   (구글 공식 최신 자동 매핑 별칭)');
+        console.log('4. 직접 수동 입력 (Custom)');
+        console.log(`(현재 설정: ${state.GEMINI_MODEL || 'gemini-3.8-flash'}, 엔터 시 유지)`);
+        console.log('----------------------------');
+        const sel = await askQuestion(rl, '선택 (1~4 또는 엔터): ');
+        const trimmed = sel.trim();
+        if (trimmed === '1') state.GEMINI_MODEL = 'gemini-3.8-flash';
+        else if (trimmed === '2') state.GEMINI_MODEL = 'gemini-3.6-flash';
+        else if (trimmed === '3') state.GEMINI_MODEL = 'gemini-flash-latest';
+        else if (trimmed === '4') {
+            const custom = await askQuestion(rl, '사용할 Gemini 모델명 직접 입력: ');
+            if (custom.trim() !== '') state.GEMINI_MODEL = custom.trim();
+        } else if (trimmed !== '' && isNaN(Number(trimmed))) {
+            state.GEMINI_MODEL = trimmed;
+        }
+        console.log(`${GREEN}✔ 선택된 모델: ${state.GEMINI_MODEL}${RESET}\n`);
         
         state.GEMINI_API_KEY = await promptSensitiveKeyIfNeeded(rl, 'Gemini API Key (GEMINI_API_KEY)', state.GEMINI_API_KEY, true);
-    } else if (state.AI_PROVIDER === 'CHATGPT') {
-        const modelInput = await askQuestion(rl, `ChatGPT 모델명 입력 (현재 기본값: ${state.OPENAI_MODEL}): `);
-        if (modelInput.trim() !== '') state.OPENAI_MODEL = modelInput.trim();
+
+    } else if (provider === 'CHATGPT') {
+        console.log('\n--- [ChatGPT 모델 선택] ---');
+        console.log('1. gpt-4o-mini   (⭐ 추천: 경제적/고성능)');
+        console.log('2. gpt-4o        (최고 성능 플래그십)');
+        console.log('3. 직접 수동 입력 (Custom)');
+        console.log(`(현재 설정: ${state.OPENAI_MODEL || 'gpt-4o-mini'}, 엔터 시 유지)`);
+        console.log('----------------------------');
+        const sel = await askQuestion(rl, '선택 (1~3 또는 엔터): ');
+        const trimmed = sel.trim();
+        if (trimmed === '1') state.OPENAI_MODEL = 'gpt-4o-mini';
+        else if (trimmed === '2') state.OPENAI_MODEL = 'gpt-4o';
+        else if (trimmed === '3') {
+            const custom = await askQuestion(rl, '사용할 ChatGPT 모델명 직접 입력: ');
+            if (custom.trim() !== '') state.OPENAI_MODEL = custom.trim();
+        } else if (trimmed !== '' && isNaN(Number(trimmed))) {
+            state.OPENAI_MODEL = trimmed;
+        }
+        console.log(`${GREEN}✔ 선택된 모델: ${state.OPENAI_MODEL}${RESET}\n`);
         
         state.OPENAI_API_KEY = await promptSensitiveKeyIfNeeded(rl, 'OpenAI API Key (OPENAI_API_KEY)', state.OPENAI_API_KEY, true);
     }

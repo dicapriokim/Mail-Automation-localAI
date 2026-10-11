@@ -15,7 +15,7 @@ async function ensureDocPermissions(auth, docId) {
                 type: 'anyone'
             }
         });
-        console.log(`[Drive Permission] 구글 문서 링크 공유 권한(anyone/reader, 보기 전용) 설정 완료: ${docId}`);
+        console.log(`[Drive Permission] 구글 문서 링크 공유 권한(anyone/reader, 보기 전용) 설정 완료`);
     } catch (err) {
         if (err.message && err.message.includes('Google Drive API has not been used')) {
             console.log(`[Drive Permission Info] ⚠️ Google Cloud Console에서 Google Drive API 활성화가 필요합니다.`);
@@ -38,7 +38,7 @@ async function findDocId(auth) {
         let targetDocId = null;
 
         if (files && files.length) {
-            console.log(`[Drive] 문서를 찾았습니다: ${files[0].name} (ID: ${files[0].id})`);
+            console.log(`[Drive] 문서를 찾았습니다: ${files[0].name}`);
             targetDocId = files[0].id;
         } else {
             console.log(`[Drive] 'Weekly Newsletter Summary' 새 문서를 생성합니다...`);
@@ -46,7 +46,7 @@ async function findDocId(auth) {
             const createdDoc = await docs.documents.create({
                 requestBody: { title: 'Weekly Newsletter Summary' }
             });
-            console.log(`[Drive] 새 문서가 생성되었습니다: ${createdDoc.data.title} (ID: ${createdDoc.data.documentId})`);
+            console.log(`[Drive] 새 문서가 생성되었습니다: ${createdDoc.data.title}`);
             targetDocId = createdDoc.data.documentId;
         }
 

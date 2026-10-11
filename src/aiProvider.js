@@ -143,27 +143,33 @@ class OllamaProvider {
             const ollamaUrl = await getResolvedOllamaUrl();
             const model = process.env.OLLAMA_MODEL ? process.env.OLLAMA_MODEL.trim() : 'qwen2.5:3b';
             
-            const response = await fetch(ollamaUrl, {
-                method: 'POST',
-                headers: { 'Content-Type': 'application/json' },
-                body: JSON.stringify({
-                    model: model,
-                    messages: [
-                        { role: 'system', content: systemPrompt },
-                        { role: 'user', content: userPrompt }
-                    ],
-                    options: { num_ctx: 1024, num_thread: 4 },
-                    temperature: 0.3,
-                    stream: false
-                })
-            });
-            if (!response.ok) throw new Error(`Ollama API 오류 status: ${response.status}`);
-            const data = await response.json();
-            const p = data.usage?.prompt_tokens || data.prompt_eval_count || 0;
-            const c = data.usage?.completion_tokens || data.eval_count || 0;
-            const t = data.usage?.total_tokens || (p + c);
-            addTokenUsage(p, c, t);
-            return data.choices?.[0]?.message?.content || '';
+            try {
+                const response = await fetch(ollamaUrl, {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify({
+                        model: model,
+                        messages: [
+                            { role: 'system', content: systemPrompt },
+                            { role: 'user', content: userPrompt }
+                        ],
+                        options: { num_ctx: 1024, num_thread: 4 },
+                        temperature: 0.3,
+                        stream: false
+                    })
+                });
+                if (!response.ok) throw new Error(`Ollama API 오류 status: ${response.status}`);
+                const data = await response.json();
+                const p = data.usage?.prompt_tokens || data.prompt_eval_count || 0;
+                const c = data.usage?.completion_tokens || data.eval_count || 0;
+                const t = data.usage?.total_tokens || (p + c);
+                addTokenUsage(p, c, t);
+                return data.choices?.[0]?.message?.content || '';
+            } catch (err) {
+                // IP 변경 또는 서버 재부팅으로 인한 단절 시 캐시를 비워 다음 재시도 때 3단계 자동 재탐색 수행
+                resolvedOllamaUrl = null;
+                throw err;
+            }
         }, 'Ollama');
     }
 }
