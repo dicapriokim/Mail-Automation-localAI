@@ -11,21 +11,22 @@
 
 - **🤖 하이브리드 멀티 AI 엔진 팩토리 (`AIFactory`)**: 
   - **Ollama (로컬 AI)**: CPU/GPU 환경에서 1건 단위 순차 처리로 환각 없이 안전 추론.
-  - **Google Gemini (API)**: 구글 게이트웨이 REST 통신 파이프라인 기반으로 20건 모음 1회 처리 (속도 10배 향상). 제미나이 3.8-flash 및 3.6-flash 지원.
+  - **Google Gemini (API)**: 구글 게이트웨이 REST 통신 파이프라인 기반으로 10건 모음 1회 처리 (속도 향상). `gemini-4-hydrogen`, `gemini-3.8-flash`, `gemini-3.6-flash` 지원.
   - **OpenAI ChatGPT (API)**: GPT-4o-mini 지원.
-- **✂️ 스마트 샌드위치 절삭 (Smart Sandwich Truncation)**:
+- **✂️ 스마트 샌드위치 절삭 & 단건 격리 방어 (Smart Truncation & Chunk Isolation)**:
   - 본문이 너무 길 경우 토큰 최적화를 위해 앞부분(핵심)과 뒷부분(결론/서명)을 남기고 중간을 지능적으로 절삭하여 정보 손실 최소화.
+  - 배치 처리 실패 시 성공한 청크를 보존하고 실패 청크만 1건씩 격리 재처리(개별 로컬 AI 우회 포함)하여 `[AI 요약 지연]` 발생 최소화.
 - **📎 첨부파일 인젝션 (Attachment Injection)**:
   - 메일에 포함된 첨부파일 메타데이터 및 텍스트를 인젝션하여 AI가 첨부파일의 주요 내용까지 요약 및 분석 가능.
 - **🛡️ 정책위반 방어 및 지수 백오프 Retry Guard**:
   - `401/403/400` 등 복구 불가능한 인증/권한 에러는 계정 보호를 위해 즉시 중단 (`Policy Guard`).
-  - `429/503` 등 서버 트랜지언트 부하 오류 발생 시 지수 백오프+Jitter(3.5s -> 7s -> 14s) 3회 대기 후 자동 복구 (`Retry Guard`).
+  - `429/503` 등 서버 트랜지언트 부하 오류 발생 시 채널 간 15초 쿨다운 및 지수 백오프+Jitter 대기 후 자동 복구 (`Retry Guard`).
 - **📱 듀얼 알림 라우터 (`NotificationRouter`)**:
   - `TELEGRAM`, `HA_NOTIFY` (Home Assistant 스마트폰 모바일 앱 푸시), `BOTH` (동시 전송) 지원.
   - 모바일 구글 문서 앱 호환 열람 전용 딥링크(`/view?usp=sharing`) 자동 전송.
 - **🧙‍♂️ 지능형 대화형 보안 CLI 대시보드 (`setup.js`)**:
   - **`[A] 🚀 전체 설정 마법사`** 원스톱 순차 입력 모드 탑재.
-  - AI 모델 버전(Gemini 3.8/3.6, Ollama, ChatGPT) 번호(1, 2, 3...) 간편 원클릭 선택 및 수동 입력 지원.
+  - AI 모델 버전(`gemini-4-hydrogen`, `gemini-3.8-flash`, Ollama, ChatGPT) 번호 간편 원클릭 선택 및 수동 입력 지원.
   - 민감 키 동적 은닉/보호 및 재노출 UX 완성.
 - **📊 실시간 토큰 측정 & Performance 리포팅**:
   - 입력/출력/총 소모 AIP 토큰 실시간 집계 및 성능 측정 로그 출력.
@@ -35,7 +36,7 @@
 ## 🛠 기술 스택 (Tech Stack)
 
 - **Main Engine**: Node.js (v18+)
-- **AI Providers**: Ollama (qwen2.5:3b) / Google Gemini (gemini-3.8-flash, gemini-3.6-flash) / OpenAI ChatGPT (gpt-4o-mini)
+- **AI Providers**: Ollama (qwen2.5:3b) / Google Gemini (gemini-4-hydrogen, gemini-3.8-flash, gemini-3.6-flash) / OpenAI ChatGPT (gpt-4o-mini)
 - **Notify Services**: Telegram Bot API / Home Assistant Mobile Push API
 - **APIs & Protocols**: Gmail API, Google Docs API, Google Drive API, Naver IMAP
 

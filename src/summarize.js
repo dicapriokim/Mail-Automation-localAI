@@ -304,6 +304,44 @@ async function processMailBody(body) {
  * @param {boolean} isFallback - 유료 AI 실패로 인한 로컬 재귀 호출 여부
  * @returns {Promise<Array>} 최종 요약 결과 배열
  */
+/**
+ * [안정성 격리 헬퍼] 청크 단위 LLM 요약 실패 시, 성공한 다른 청크를 보존하고
+ * 문제 청크만 1건씩 격리 재처리하여 정상 메일까지 [AI 요약 지연]으로 빠지는 현상을 방지합니다.
+ */
+async function summarizeChunkWithIsolation(chunk, providerName, isFallback) {
+    const forcedProvider = isFallback ? 'OLLAMA' : null;
+    try {
+        return await summarizeBatchWithLLM(chunk, forcedProvider);
+    } catch (chunkErr) {
+        console.warn(`[AI Batch Isolation] ${chunk.length}건 청크 실패(${chunkErr.message}). 단건 격리 모드로 전환합니다...`);
+        const results = [];
+        for (let idx = 0; idx < chunk.length; idx++) {
+            const singleTarget = [chunk[idx]];
+            try {
+                const res = await summarizeBatchWithLLM(singleTarget, forcedProvider);
+                results.push(res[0] || null);
+            } catch (singleErr) {
+                // 클라우드 모드에서 단건 실패 시 즉시 로컬 AI(OLLAMA)로 1건만 우회 시도
+                if (!isFallback && providerName !== 'OLLAMA') {
+                    try {
+                        console.warn(`[Single Fallback] 단건(${idx + 1}/${chunk.length}) 클라우드 실패 -> 로컬 AI(OLLAMA) 우회 시도`);
+                        const localRes = await summarizeBatchWithLLM(singleTarget, 'OLLAMA');
+                        results.push(localRes[0] || null);
+                        continue;
+                    } catch (localErr) {
+                        console.error(`[Single Fallback Error] 로컬 우회 실패: ${localErr.message}`);
+                    }
+                }
+                results.push(null);
+            }
+            if (idx + 1 < chunk.length && !isFallback && providerName !== 'OLLAMA') {
+                await new Promise(resolve => setTimeout(resolve, 1500));
+            }
+        }
+        return results;
+    }
+}
+
 async function applyHybridLLMSummaries(rawData, channelName, options = {}, isFallback = false) {
     const finalResults = [];
     const llmTargets = [];
@@ -344,34 +382,17 @@ async function applyHybridLLMSummaries(rawData, channelName, options = {}, isFal
         // v3.2: 429 방지를 위해 청크 15건->10건 원복 (본문 4000자로 대폭 확대된 것에 대한 안전 마진)
         const CHUNK_SIZE = 10;
         let summaries = [];
-        let chunkFailed = false;
 
-        try {
-            for (let i = 0; i < llmTargets.length; i += CHUNK_SIZE) {
-                const chunk = llmTargets.slice(i, i + CHUNK_SIZE);
-                console.log(`[AI Batch] Chunk 처리 중... (${i + 1} ~ ${Math.min(i + CHUNK_SIZE, llmTargets.length)} / ${llmTargets.length})`);
-                
-                // v3.0 버그 픽스: 재귀 로컬 폴백 모드(isFallback=true)일 때는 summarizeBatchWithLLM 내부에서도 OLLAMA를 강제로 쓰도록 지시
-                const chunkSummaries = await summarizeBatchWithLLM(chunk, isFallback ? 'OLLAMA' : null);
-                
-                summaries = summaries.concat(chunkSummaries);
-                if (i + CHUNK_SIZE < llmTargets.length) {
-                    // API 속도 제한 쿨다운을 위한 충분한 여유(Margin)
-                    await new Promise(resolve => setTimeout(resolve, 8000)); 
-                }
-            }
-        } catch (err) {
-            console.error(`[AI Batch Error] Chunk 처리 중 심각한 에러 발생: ${err.message}`);
-            chunkFailed = true;
-        }
+        for (let i = 0; i < llmTargets.length; i += CHUNK_SIZE) {
+            const chunk = llmTargets.slice(i, i + CHUNK_SIZE);
+            console.log(`[AI Batch] Chunk 처리 중... (${i + 1} ~ ${Math.min(i + CHUNK_SIZE, llmTargets.length)} / ${llmTargets.length})`);
+            
+            const chunkSummaries = await summarizeChunkWithIsolation(chunk, providerName, isFallback);
+            summaries = summaries.concat(chunkSummaries);
 
-        if (chunkFailed) {
-            if (!isFallback && providerName !== 'OLLAMA') {
-                console.log(`[Fallback Trigger] 유료 AI 실패 감지! 로컬 AI 모드로 전면 전환하여 알고리즘을 재실행합니다...`);
-                return await applyHybridLLMSummaries(rawData, channelName, options, true);
-            } else {
-                console.log(`[Safe Fallback] 로컬 AI마저도 실패했습니다. 최후의 텍스트 자르기 방어망을 가동합니다.`);
-                summaries = llmTargets.map(() => null);
+            if (i + CHUNK_SIZE < llmTargets.length) {
+                // API 속도 제한 쿨다운을 위한 충분한 여유(Margin)
+                await new Promise(resolve => setTimeout(resolve, 8000)); 
             }
         }
 
@@ -531,6 +552,7 @@ async function fetchNaverRawData() {
         console.log(`[Naver] 최적화 수집 완료: 총 ${targetMessages.length}건 처리 예정`);
 
         const rawData = [];
+        let skippedAdCount = 0;
         for (const item of targetMessages) {
             const rawPart = item.parts.find(p => p.which === '');
             if (!rawPart) continue;
@@ -538,9 +560,15 @@ async function fetchNaverRawData() {
             // [Task 2] simpleParser를 통한 Base64/MIME 디코딩 수행
             const parsed = await simpleParser(rawPart.body);
 
+            const subject = parsed.subject || 'No Subject';
+            // Gmail(-subject:(광고))과 동일하게 제목에 (광고) 포함된 메일은 LLM 부하 절감을 위해 사전 제외
+            if (subject.includes('(광고)')) {
+                skippedAdCount++;
+                continue;
+            }
+
             // 텍스트 우선 추출, 없으면 HTML에서 태그 제거
             const cleanText = parsed.text || parsed.textAsHtml?.replace(/<[^>]*>/g, ' ') || '';
-            const subject = parsed.subject || 'No Subject';
             const from = parsed.from?.text || 'Unknown';
             const date = parsed.date || new Date();
 
@@ -559,6 +587,9 @@ async function fetchNaverRawData() {
             rawData.push({ uid: item.attributes.uid, subject, from, date, body: cleanText, attachmentInfo });
         }
 
+        if (skippedAdCount > 0) {
+            console.log(`[Naver] (광고) 제목 사전 필터링으로 ${skippedAdCount}건 제외됨`);
+        }
         connection.end();
         return rawData;
     } catch (err) {
@@ -932,6 +963,16 @@ async function cleanupOldReports(auth, documentId) {
     }
 }
 
+/**
+ * 클라우드 AI(Gemini/ChatGPT) 사용 시 채널 전환(Gmail -> Naver) 전 분당 쿼터 회복을 위한 쿨다운 대기
+ */
+async function waitCloudCooldown(processedCount, delayMs = 15000) {
+    const provider = (process.env.AI_PROVIDER || 'OLLAMA').trim().toUpperCase();
+    if (provider === 'OLLAMA' || processedCount <= 0) return;
+    console.log(`[Rate Limit Guard] Naver 요약 전 AI 쿼터 회복을 위해 ${delayMs / 1000}초 대기합니다...`);
+    await new Promise(resolve => setTimeout(resolve, delayMs));
+}
+
 async function main() {
     try {
         const auth = await authorize();
@@ -969,6 +1010,7 @@ async function main() {
 
         console.log('[Step 2.5] LLM 요약 중 (Ollama qwen2.5:3b, 순차 처리)...');
         const gmailData = await applyHybridLLMSummaries(gmailRaw, 'Gmail');
+        await waitCloudCooldown(gmailData.length);
         const naverData = await applyHybridLLMSummaries(naverRaw, 'Naver');
 
         console.log('[Step 3] 구글 독스 기록 중...');
@@ -992,5 +1034,6 @@ module.exports = {
     applyHybridLLMSummaries,
     appendToDocs,
     clearDocContents,
-    cleanupOldReports
+    cleanupOldReports,
+    waitCloudCooldown
 };

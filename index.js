@@ -1,6 +1,6 @@
 const { authorize } = require('./src/auth');
 const { cleanupGmail, cleanupNaver } = require('./src/cleanup');
-const { fetchGmailSummaries, fetchNaverSummaries, appendToDocs, clearDocContents, cleanupOldReports } = require('./src/summarize');
+const { fetchGmailSummaries, fetchNaverSummaries, appendToDocs, clearDocContents, cleanupOldReports, waitCloudCooldown } = require('./src/summarize');
 const { routeNotification } = require('./src/notificationRouter');
 const { AIFactory } = require('./src/aiProvider');
 const { findDocId, ensureDocPermissions } = require('./src/findDoc');
@@ -40,6 +40,7 @@ async function main() {
         // 3. Summarize
         console.log('[Step 2] 요약 및 기록 시작...');
         const gmailSummaries = await fetchGmailSummaries(auth);
+        await waitCloudCooldown(gmailSummaries.length);
         const naverSummaries = await fetchNaverSummaries();
 
         totalProcessed = gmailSummaries.length + (naverSummaries || []).length;

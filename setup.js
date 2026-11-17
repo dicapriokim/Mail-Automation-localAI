@@ -318,18 +318,20 @@ async function configureAIModelAndKey(rl, state, isWizard = false) {
 
     } else if (provider === 'GEMINI') {
         console.log('\n--- [Gemini 모델 선택] ---');
-        console.log('1. gemini-3.8-flash      (⭐ 최신 추천: 고성능/정밀 요약)');
-        console.log('2. gemini-3.6-flash      (안정화 검증 버전)');
-        console.log('3. gemini-flash-latest   (구글 공식 최신 자동 매핑 별칭)');
-        console.log('4. 직접 수동 입력 (Custom)');
+        console.log('1. gemini-3.8-flash      (⭐ 안정 추천: 무료 쿼터 여유/고성능)');
+        console.log('2. gemini-4-hydrogen     (🚀 최신 4세대: 고도화된 추론)');
+        console.log('3. gemini-3.6-flash      (기존 안정화 검증 버전)');
+        console.log('4. gemini-flash-latest   (구글 공식 최신 자동 매핑 별칭)');
+        console.log('5. 직접 수동 입력 (Custom)');
         console.log(`(현재 설정: ${state.GEMINI_MODEL || 'gemini-3.8-flash'}, 엔터 시 유지)`);
         console.log('----------------------------');
-        const sel = await askQuestion(rl, '선택 (1~4 또는 엔터): ');
+        const sel = await askQuestion(rl, '선택 (1~5 또는 엔터): ');
         const trimmed = sel.trim();
         if (trimmed === '1') state.GEMINI_MODEL = 'gemini-3.8-flash';
-        else if (trimmed === '2') state.GEMINI_MODEL = 'gemini-3.6-flash';
-        else if (trimmed === '3') state.GEMINI_MODEL = 'gemini-flash-latest';
-        else if (trimmed === '4') {
+        else if (trimmed === '2') state.GEMINI_MODEL = 'gemini-4-hydrogen';
+        else if (trimmed === '3') state.GEMINI_MODEL = 'gemini-3.6-flash';
+        else if (trimmed === '4') state.GEMINI_MODEL = 'gemini-flash-latest';
+        else if (trimmed === '5') {
             const custom = await askQuestion(rl, '사용할 Gemini 모델명 직접 입력: ');
             if (custom.trim() !== '') state.GEMINI_MODEL = custom.trim();
         } else if (trimmed !== '' && isNaN(Number(trimmed))) {
